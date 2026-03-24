@@ -460,10 +460,13 @@ footer a:hover { color: var(--amber); }
             </select>
           </div>
           <div class="field">
-            <label>GDTF Version</label>
-            <select id="gdtf-ver">
-              <option value="1.2">1.2 (MA3 / ETC / Vectorworks)</option>
-              <option value="1.1">1.1</option>
+            <label>3D Model</label>
+            <select id="model-type">
+              <option value="none">None (wireframe)</option>
+              <option value="spot" selected>Spot / Moving Head</option>
+              <option value="wash">Wash</option>
+              <option value="strobe">Strobe / Blinder</option>
+              <option value="bar">LED Bar</option>
             </select>
           </div>
         </div>
@@ -873,14 +876,65 @@ function syntaxHL(xml) {
     .replace(/="([^"]*)"/g, `="<span class="xv">$1</span>"`);
 }
 
+// ── 3D Model file mapping
+const MODEL_FILES = {
+  spot:   ['base.3ds', 'yoke.3ds', 'head.3ds'],
+  wash:   ['base.3ds', 'yoke.3ds', 'head.3ds'],
+  strobe: ['base.3ds', 'yoke.3ds', 'head.3ds'],
+  bar:    ['yoke.3ds', 'head.3ds'],
+};
+
+// Update XML Model elements to reference .3ds files
+function setModelFiles(xml, modelType) {
+  if (!modelType || modelType === 'none') return xml;
+  // Set File attribute and PrimitiveType="Undefined" on all Model elements
+  return xml.replace(/<Model\s([^>]*?)(\s*\/?>)/g, (match, attrs, close) => {
+    const nameMatch = attrs.match(/Name="([^"]+)"/);
+    if (!nameMatch) return match;
+    const name = nameMatch[1].toLowerCase();
+    let file = '';
+    if (name.includes('base') || name.includes('body')) file = 'base';
+    else if (name.includes('yoke') || name.includes('arm')) file = 'yoke';
+    else file = 'head';
+    // For bar type without base model, map base to yoke
+    if (modelType === 'bar' && file === 'base') file = 'yoke';
+    // Remove existing File/PrimitiveType/Primitive attrs and add new ones
+    let newAttrs = attrs
+      .replace(/\s*File="[^"]*"/g, '')
+      .replace(/\s*PrimitiveType="[^"]*"/g, '')
+      .replace(/\s*Primitive="[^"]*"/g, '');
+    newAttrs += ` File="${file}" PrimitiveType="Undefined"`;
+    return `<Model ${newAttrs}${close}`;
+  });
+}
+
 // ── Download — always as description.xml inside ZIP
 async function downloadGDTF() {
   if (!generatedXML) return;
   const mfr = (document.getElementById('manufacturer').value.trim() || 'Unknown').replace(/[^a-zA-Z0-9 _-]/g,'');
   const name = (generatedName || 'fixture').replace(/[^a-zA-Z0-9 _-]/g,'');
   const filename = `${mfr}_${name}.gdtf`.replace(/\s+/g,'_');
+  const modelType = document.getElementById('model-type').value;
+
+  // Update XML with model file references
+  let xml = modelType !== 'none' ? setModelFiles(generatedXML, modelType) : generatedXML;
+
   const zip = new JSZip();
-  zip.file('description.xml', generatedXML); // always description.xml
+  zip.file('description.xml', xml);
+
+  // Include 3D model files if a type is selected
+  if (modelType !== 'none' && MODEL_FILES[modelType]) {
+    for (const file of MODEL_FILES[modelType]) {
+      try {
+        const res = await fetch(`/models/${modelType}/${file}`);
+        if (res.ok) {
+          const buf = await res.arrayBuffer();
+          zip.file(`models/3ds/${file}`, buf);
+        }
+      } catch(e) { /* skip missing model files */ }
+    }
+  }
+
   const blob = await zip.generateAsync({ type:'blob', compression:'STORE' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
