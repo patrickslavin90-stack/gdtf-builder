@@ -162,7 +162,7 @@ function parseMA3Xml(xml) {
 }
 
 // Build instance info string for the Gemini prompt
-function buildInstancePrompt(parsed, dmxMode) {
+function buildInstancePrompt(parsed) {
   if (!parsed) return '';
   const hasPixels = Object.values(parsed.grouped).some(g => g.length > 1);
   const lines = ['\nMULTI-INSTANCE STRUCTURE (from MA3 patch data):'];
@@ -183,16 +183,6 @@ function buildInstancePrompt(parsed, dmxMode) {
   }
 
   if (hasPixels) {
-    lines.push('');
-    lines.push('MULTIPLE MODES REQUIRED (MA3 needs multiple geometry trees for proper sub-fixture display):');
-    lines.push(`The data above is for the "${dmxMode || 'Default'}" mode. You MUST generate AT LEAST 3 DMXModes, each with its own top-level geometry tree under <Geometries>.`);
-    lines.push('For each mode, create a separate geometry tree (e.g. "Mode1 Base" > "Mode1 Head" with GeometryReferences) and a matching DMXMode referencing that geometry.');
-    lines.push('Suggested modes:');
-    lines.push(`  1. "${dmxMode || 'Default'}" — use the exact channel/instance structure above`);
-    lines.push('  2. "Normal" or "Standard" — main channels only, single pixel group (all LEDs as one), fewer total channels');
-    lines.push('  3. "Compressed" or "Basic" — simplified mode with fewer channels, no individual pixel control');
-    lines.push('Each mode needs its own top-level geometry tree with appropriate GeometryReferences and its own DMXMode with DMXChannels.');
-    lines.push('The pixel template Beam geometries can be SHARED across modes — only the geometry trees and DMXModes differ.');
   }
 
   return lines.join('\n') + '\n';
@@ -376,7 +366,7 @@ exports.handler = async function(event) {
   if (notes)       prompt += `ADDITIONAL NOTES:\n${notes}\n\n`;
 
   // Add parsed MA3 instance structure to prompt
-  const instancePrompt = buildInstancePrompt(parsedMA3, dmxMode);
+  const instancePrompt = buildInstancePrompt(parsedMA3);
   if (instancePrompt) prompt += instancePrompt + '\n';
 
   prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
