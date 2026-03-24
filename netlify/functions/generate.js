@@ -336,7 +336,26 @@ exports.handler = async function(event) {
   try { body = JSON.parse(event.body || '{}'); }
   catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) }; }
 
-  const { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes, existingXml, ma3Xml } = body;
+  let { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes, existingXml, ma3Xml, ma3XmlpBase64 } = body;
+
+  // Decompress base64 gzip .xmlp on the server
+  if (ma3XmlpBase64 && !ma3Xml) {
+    try {
+      const zlib = require('zlib');
+      const buf = Buffer.from(ma3XmlpBase64, 'base64');
+      const decompressed = zlib.gunzipSync(buf).toString('utf8');
+      const xmlStart = decompressed.indexOf('<?xml');
+      ma3Xml = xmlStart !== -1 ? decompressed.slice(xmlStart) : decompressed;
+
+      // Auto-extract fixture info if not provided
+      if (!fixtureName) { const m = ma3Xml.match(/FixtureType\s+name="([^"]+)"/); if (m) fixtureName = m[1]; }
+      if (!manufacturer) { const m = ma3Xml.match(/<manufacturer>([^<]+)<\/manufacturer>/); if (m) manufacturer = m[1]; }
+      if (!dmxMode) { const m = ma3Xml.match(/FixtureType[^>]+mode="([^"]+)"/); if (m) dmxMode = m[1]; }
+    } catch(e) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Failed to decompress .xmlp: ' + e.message }) };
+    }
+  }
+
   if (!fixtureName && !channels && !existingXml && !ma3Xml) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: 'Provide fixture name, channels, or existing XML' }) };
   }

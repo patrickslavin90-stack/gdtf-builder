@@ -563,65 +563,47 @@ function handleFile(file) {
     r.onload = e => fileContent = e.target.result.split(',')[1];
     r.readAsDataURL(file);
   } else if (ext === 'xmlp') {
-    // MA3 patch export — gzip compressed XML
-    fileType = 'ma3xml';
-    fileLoading = true;
-    setStatus('busy', 'Decompressing MA3 patch…');
+    // MA3 patch export — gzip compressed, send raw base64 to server for decompression
+    fileType = 'ma3xmlp_raw';
     const r = new FileReader();
-    r.onload = async e => {
+    r.onload = e => {
+      fileContent = e.target.result.split(',')[1]; // base64
+      setStatus('ok', 'MA3 patch file loaded — will be decompressed server-side');
+
+      // Try client-side decompression just for auto-fill (non-critical)
       try {
-        // Try DecompressionStream first, fall back to manual gzip via JSZip's pako
-        let text;
         if (typeof DecompressionStream !== 'undefined') {
-          const ds = new DecompressionStream('gzip');
-          const blob = new Blob([e.target.result]);
-          const decompressed = blob.stream().pipeThrough(ds);
-          text = await new Response(decompressed).text();
-        } else {
-          // Fallback: use pako from JSZip internals or raw inflate
-          const arr = new Uint8Array(e.target.result);
-          const dec = new TextDecoder();
-          text = dec.decode(arr);
+          const buf = Uint8Array.from(atob(fileContent), c => c.charCodeAt(0));
+          const blob = new Blob([buf]);
+          blob.stream().pipeThrough(new DecompressionStream('gzip'))
+            .pipeTo(new WritableStream({ write() {} })); // just test it works
+          new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text().then(text => {
+            const xmlStart = text.indexOf('<?xml');
+            const xml = xmlStart !== -1 ? text.slice(xmlStart) : text;
+            // Auto-fill form fields
+            const ma3Name = xml.match(/FixtureType\s+name="([^"]+)"/);
+            const ma3Mode = xml.match(/FixtureType[^>]+mode="([^"]+)"/);
+            const ma3Mfr = xml.match(/<manufacturer>([^<]+)<\/manufacturer>/);
+            if (ma3Name && !document.getElementById('fixture-name').value.trim())
+              document.getElementById('fixture-name').value = ma3Name[1];
+            if (ma3Mfr && !document.getElementById('manufacturer').value.trim())
+              document.getElementById('manufacturer').value = ma3Mfr[1];
+            if (ma3Mode && !document.getElementById('dmx-mode').value.trim())
+              document.getElementById('dmx-mode').value = ma3Mode[1];
+            // Auto-detect 3D model type
+            const classes = (xml.match(/class="([^"]+)"/g) || []).map(m => m.replace(/class="|"/g,'').toLowerCase());
+            const sel = document.getElementById('model-type');
+            const instanceCount = (xml.match(/<Instance\s/g) || []).length;
+            if (classes.some(c => c.includes('headmover'))) {
+              if (instanceCount > 6) sel.value = 'bar';
+              else if (xml.toLowerCase().includes('wash')) sel.value = 'wash';
+              else sel.value = 'spot';
+            } else if (classes.some(c => c.includes('strobe') || c.includes('blinder'))) sel.value = 'strobe';
+          }).catch(() => {}); // auto-fill is best-effort
         }
-        // Strip binary header if present (MA3 adds "MA DATA" prefix)
-        const xmlStart = text.indexOf('<?xml');
-        fileContent = xmlStart !== -1 ? text.slice(xmlStart) : text;
-
-        if (!fileContent || !fileContent.includes('<Module')) {
-          setStatus('err', 'Could not parse .xmlp — file may be corrupted');
-          return;
-        }
-        fileLoading = false;
-        setStatus('ok', 'MA3 patch loaded — ' + (fileContent.length/1024).toFixed(0) + ' KB extracted');
-
-        // Auto-fill form fields from MA3 XML
-        const ma3Name = fileContent.match(/FixtureType\s+name="([^"]+)"/);
-        const ma3Mode = fileContent.match(/FixtureType[^>]+mode="([^"]+)"/);
-        const ma3Mfr = fileContent.match(/<manufacturer>([^<]+)<\/manufacturer>/);
-        if (ma3Name && !document.getElementById('fixture-name').value.trim())
-          document.getElementById('fixture-name').value = ma3Name[1];
-        if (ma3Mfr && !document.getElementById('manufacturer').value.trim())
-          document.getElementById('manufacturer').value = ma3Mfr[1];
-        if (ma3Mode && !document.getElementById('dmx-mode').value.trim())
-          document.getElementById('dmx-mode').value = ma3Mode[1];
-
-        // Auto-detect 3D model type from module class
-        const moduleClasses = fileContent.match(/class="([^"]+)"/g) || [];
-        const classes = moduleClasses.map(m => m.replace(/class="|"/g,'').toLowerCase());
-        const sel = document.getElementById('model-type');
-        if (classes.some(c => c.includes('headmover') || c.includes('scanner'))) {
-          // Check if it's a bar (has many pixel instances) or spot/wash
-          const instanceCount = (fileContent.match(/<Instance\s/g) || []).length;
-          const hasLED = classes.some(c => c.includes('led'));
-          if (instanceCount > 6 && hasLED) sel.value = 'bar';
-          else if (fileContent.toLowerCase().includes('wash') || fileContent.toLowerCase().includes('aura')) sel.value = 'wash';
-          else sel.value = 'spot';
-        } else if (classes.some(c => c.includes('strobe') || c.includes('blinder'))) {
-          sel.value = 'strobe';
-        }
-      } catch(err) { fileLoading = false; setStatus('err', 'Could not decompress .xmlp: ' + err.message); }
+      } catch(e) {} // auto-fill failure is non-critical
     };
-    r.readAsArrayBuffer(file);
+    r.readAsDataURL(file);
   } else if (ext === 'gdtf') {
     fileType = 'gdtf';
     const r = new FileReader();
@@ -829,13 +811,9 @@ async function generate() {
     const payload = { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes };
     if (fileType === 'ma3xml' && fileContent) {
       payload.ma3Xml = fileContent.slice(0, 30000);
-      // Auto-extract fixture info from MA3 XML if not already filled
-      const ma3Name = fileContent.match(/FixtureType\s+name="([^"]+)"/);
-      const ma3Mode = fileContent.match(/FixtureType[^>]+mode="([^"]+)"/);
-      const ma3Mfr = fileContent.match(/<manufacturer>([^<]+)<\/manufacturer>/);
-      if (ma3Name && !payload.fixtureName) payload.fixtureName = ma3Name[1];
-      if (ma3Mode && !payload.dmxMode) payload.dmxMode = ma3Mode[1];
-      if (ma3Mfr && !payload.manufacturer) payload.manufacturer = ma3Mfr[1];
+    }
+    if (fileType === 'ma3xmlp_raw' && fileContent) {
+      payload.ma3XmlpBase64 = fileContent; // raw gzip base64, decompressed server-side
     }
     if (fileType === 'text' && fileContent) payload.existingXml = fileContent.includes('<GDTF') ? fileContent : null;
     if (fileType === 'text' && fileContent && !payload.existingXml) payload.channels = (channels ? channels + '\n\n' : '') + 'FILE CONTENT:\n' + fileContent.slice(0, 8000);
