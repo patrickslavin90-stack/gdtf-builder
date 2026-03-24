@@ -1,0 +1,5 @@
+.env
+test-output/
+.3ds/
+.claude/
+node_modules/

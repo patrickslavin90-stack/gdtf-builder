@@ -2,7 +2,7 @@
 /**
  * Local test script for the GDTF builder function.
  * Usage:
- *   $env:GEMINI_API_KEY="AIza..."
+ *   Put your key in .env file: GEMINI_API_KEY=AIza...
  *   node test.js
  *   node test.js "My Fixture" "My Mfr" "CH1 Dimmer\nCH2 Strobe" "5CH"
  *
@@ -11,9 +11,18 @@
  *   --xml    Print full XML to console
  */
 
-const { handler } = require('./netlify/functions/generate.js');
+// Load .env file if present (GEMINI_API_KEY=AIza...)
 const fs = require('fs');
 const path = require('path');
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z_]+)\s*=\s*"?([^"\n]+)"?\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+}
+
+const { handler } = require('./netlify/functions/generate.js');
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter(a => a.startsWith('--')));
