@@ -371,6 +371,9 @@ exports.handler = async function(event) {
 
   prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
 
+  // Use smaller token limit when we already have parsed structure (faster response)
+  const maxTokens = parsedMA3 ? 16384 : 32768;
+
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -380,7 +383,7 @@ exports.handler = async function(event) {
         body: JSON.stringify({
           system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 32768, temperature: 0.1 },
+          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
         }),
       }
     );
