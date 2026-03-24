@@ -559,6 +559,22 @@ function handleFile(file) {
     const r = new FileReader();
     r.onload = e => fileContent = e.target.result.split(',')[1];
     r.readAsDataURL(file);
+  } else if (ext === 'xmlp') {
+    // MA3 patch export — gzip compressed XML
+    fileType = 'ma3xml';
+    const r = new FileReader();
+    r.onload = async e => {
+      try {
+        const ds = new DecompressionStream('gzip');
+        const blob = new Blob([e.target.result]);
+        const decompressed = blob.stream().pipeThrough(ds);
+        const text = await new Response(decompressed).text();
+        // Strip binary header if present (MA3 adds "MA DATA" prefix)
+        const xmlStart = text.indexOf('<?xml');
+        fileContent = xmlStart !== -1 ? text.slice(xmlStart) : text;
+      } catch(err) { setStatus('err', 'Could not decompress .xmlp: ' + err.message); }
+    };
+    r.readAsArrayBuffer(file);
   } else if (ext === 'gdtf') {
     fileType = 'gdtf';
     const r = new FileReader();
@@ -605,7 +621,7 @@ function applyMA3Fixes(xml) {
     if (!ft) return null;
 
     root.setAttribute('DataVersion', '1.2');
-    if (!ft.getAttribute('CanHaveChildren')) ft.setAttribute('CanHaveChildren', 'Yes');
+    if (ft.getAttribute('CanHaveChildren') !== 'Yes') ft.setAttribute('CanHaveChildren', 'Yes');
     if (!ft.getAttribute('ThumbnailOffsetX')) ft.setAttribute('ThumbnailOffsetX', '0');
     if (!ft.getAttribute('ThumbnailOffsetY')) ft.setAttribute('ThumbnailOffsetY', '0');
     if (ft.getAttribute('RefFT') !== null) ft.removeAttribute('RefFT');
@@ -763,6 +779,16 @@ async function generate() {
     // AI generation via backend proxy
     setStatus('busy', 'Generating profile…');
     const payload = { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes };
+    if (fileType === 'ma3xml' && fileContent) {
+      payload.ma3Xml = fileContent.slice(0, 30000);
+      // Auto-extract fixture info from MA3 XML if not already filled
+      const ma3Name = fileContent.match(/FixtureType\s+name="([^"]+)"/);
+      const ma3Mode = fileContent.match(/FixtureType[^>]+mode="([^"]+)"/);
+      const ma3Mfr = fileContent.match(/<manufacturer>([^<]+)<\/manufacturer>/);
+      if (ma3Name && !payload.fixtureName) payload.fixtureName = ma3Name[1];
+      if (ma3Mode && !payload.dmxMode) payload.dmxMode = ma3Mode[1];
+      if (ma3Mfr && !payload.manufacturer) payload.manufacturer = ma3Mfr[1];
+    }
     if (fileType === 'text' && fileContent) payload.existingXml = fileContent.includes('<GDTF') ? fileContent : null;
     if (fileType === 'text' && fileContent && !payload.existingXml) payload.channels = (channels ? channels + '\n\n' : '') + 'FILE CONTENT:\n' + fileContent.slice(0, 8000);
 
