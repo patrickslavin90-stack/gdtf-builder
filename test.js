@@ -2,7 +2,7 @@
 /**
  * Local test script for the GDTF builder function.
  * Usage:
- *   $env:GEMINI_API_KEY="AIzaSyBzyb10AaHWQbCHmMdnCMojDgMYdQZ09uc"
+ *   $env:GEMINI_API_KEY="AIza..."
  *   node test.js
  *   node test.js "My Fixture" "My Mfr" "CH1 Dimmer\nCH2 Strobe" "5CH"
  *
