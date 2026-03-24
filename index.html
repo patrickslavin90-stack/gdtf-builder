@@ -568,13 +568,54 @@ function handleFile(file) {
     const r = new FileReader();
     r.onload = async e => {
       try {
-        const ds = new DecompressionStream('gzip');
-        const blob = new Blob([e.target.result]);
-        const decompressed = blob.stream().pipeThrough(ds);
-        const text = await new Response(decompressed).text();
+        // Try DecompressionStream first, fall back to manual gzip via JSZip's pako
+        let text;
+        if (typeof DecompressionStream !== 'undefined') {
+          const ds = new DecompressionStream('gzip');
+          const blob = new Blob([e.target.result]);
+          const decompressed = blob.stream().pipeThrough(ds);
+          text = await new Response(decompressed).text();
+        } else {
+          // Fallback: use pako from JSZip internals or raw inflate
+          const arr = new Uint8Array(e.target.result);
+          const dec = new TextDecoder();
+          text = dec.decode(arr);
+        }
         // Strip binary header if present (MA3 adds "MA DATA" prefix)
         const xmlStart = text.indexOf('<?xml');
         fileContent = xmlStart !== -1 ? text.slice(xmlStart) : text;
+
+        if (!fileContent || !fileContent.includes('<Module')) {
+          setStatus('err', 'Could not parse .xmlp — file may be corrupted');
+          return;
+        }
+        setStatus('ok', 'MA3 patch loaded — ' + (fileContent.length/1024).toFixed(0) + ' KB extracted');
+
+        // Auto-fill form fields from MA3 XML
+        const ma3Name = fileContent.match(/FixtureType\s+name="([^"]+)"/);
+        const ma3Mode = fileContent.match(/FixtureType[^>]+mode="([^"]+)"/);
+        const ma3Mfr = fileContent.match(/<manufacturer>([^<]+)<\/manufacturer>/);
+        if (ma3Name && !document.getElementById('fixture-name').value.trim())
+          document.getElementById('fixture-name').value = ma3Name[1];
+        if (ma3Mfr && !document.getElementById('manufacturer').value.trim())
+          document.getElementById('manufacturer').value = ma3Mfr[1];
+        if (ma3Mode && !document.getElementById('dmx-mode').value.trim())
+          document.getElementById('dmx-mode').value = ma3Mode[1];
+
+        // Auto-detect 3D model type from module class
+        const moduleClasses = fileContent.match(/class="([^"]+)"/g) || [];
+        const classes = moduleClasses.map(m => m.replace(/class="|"/g,'').toLowerCase());
+        const sel = document.getElementById('model-type');
+        if (classes.some(c => c.includes('headmover') || c.includes('scanner'))) {
+          // Check if it's a bar (has many pixel instances) or spot/wash
+          const instanceCount = (fileContent.match(/<Instance\s/g) || []).length;
+          const hasLED = classes.some(c => c.includes('led'));
+          if (instanceCount > 6 && hasLED) sel.value = 'bar';
+          else if (fileContent.toLowerCase().includes('wash') || fileContent.toLowerCase().includes('aura')) sel.value = 'wash';
+          else sel.value = 'spot';
+        } else if (classes.some(c => c.includes('strobe') || c.includes('blinder'))) {
+          sel.value = 'strobe';
+        }
       } catch(err) { setStatus('err', 'Could not decompress .xmlp: ' + err.message); }
     };
     r.readAsArrayBuffer(file);
