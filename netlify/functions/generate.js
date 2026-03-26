@@ -172,6 +172,31 @@ function parseMA3Xml(xml) {
   return { modules, instances, grouped };
 }
 
+// Map MA3 attribute names to standard GDTF attribute names
+const MA3_TO_GDTF = {
+  PAN: 'Pan', TILT: 'Tilt', DIM: 'Dimmer', DIMMER: 'Dimmer',
+  SHUTTER: 'Shutter', SHUTTER2: 'Shutter2',
+  COLORRGB1: 'ColorAdd_R (Red)', COLORRGB2: 'ColorAdd_G (Green)', COLORRGB3: 'ColorAdd_B (Blue)',
+  COLORRGB4: 'ColorAdd_W (White)', COLORRGB5: 'ColorAdd_W (White)',
+  COLOR1: 'Color1 (Color Wheel)', CTO: 'CTO', CTC: 'CTO',
+  COLORMIXER: 'ColorMixer', COLORMIXER2: 'ColorMixer2',
+  COLORTEMPERATURE: 'ColorTemperature',
+  GOBO1: 'Gobo1', GOBO1_POS: 'Gobo1Pos (Gobo 1 Rotation)', GOBO2: 'Gobo2', GOBO2_POS: 'Gobo2Pos',
+  ZOOM: 'Zoom', FOCUS: 'Focus', FOCUSMODE: 'FocusMode',
+  IRIS: 'Iris', FROST: 'Frost', PRISM: 'Prism1', PRISM_POS: 'Prism1Pos',
+  EFFECTWHEEL: 'Effects1 (Effect Wheel)', EFFECTINDEXROTATE: 'Effects1Pos (Effect Rotate)',
+  ANIMATIONWHEEL: 'AnimationWheel1',
+  POSITIONMSPEED: 'PositionSpeed', EFFECTMACROS: 'EffectMacros',
+  PWMFREQUENCY: 'Control1 (PWM Frequency)',
+  LEDENGINEEFFECTS: 'LEDEffect1', LEDENGINEEFFECTRATE: 'LEDEffect1Rate',
+  LEDENGINEEFFECTSTEPTIME: 'LEDEffect1FadeTime',
+  FIXTUREGLOBALRESET: 'FixtureGlobalReset', MACROSELECT: 'MacroSelect',
+};
+
+function translateMA3Attr(attr) {
+  return MA3_TO_GDTF[attr.toUpperCase()] || attr;
+}
+
 // Build instance info string for the Gemini prompt
 function buildInstancePrompt(parsed) {
   if (!parsed) return '';
@@ -180,9 +205,10 @@ function buildInstancePrompt(parsed) {
   for (let i = 0; i < parsed.modules.length; i++) {
     const mod = parsed.modules[i];
     const patches = parsed.grouped[i] || [];
-    const chList = mod.channels.map(c =>
-      c.fine ? `${c.attribute}(${c.coarse},${c.fine})` : `${c.attribute}(${c.coarse})`
-    ).join(', ');
+    const chList = mod.channels.map(c => {
+      const name = translateMA3Attr(c.attribute);
+      return c.fine ? `${name}(CH${c.coarse},${c.fine} 16bit)` : `${name}(CH${c.coarse})`;
+    }).join(', ');
     if (patches.length <= 1) {
       lines.push(`Main Module "${mod.name}" [${mod.class}]: ${mod.channels.length}ch — ${chList}`);
       lines.push(`  Single instance at DMX offset ${patches[0] || 1}`);
