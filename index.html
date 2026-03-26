@@ -949,11 +949,13 @@ function setModelFiles(xml, modelType) {
       .replace(/\s*PrimitiveType="[^"]*"/g, '')
       .replace(/\s*Primitive="[^"]*"/g, '');
     if (beamModelSet.has(name) && !modelFileMap[name]) {
-      // Beam model — use a tiny Cube primitive, no .3ds file
-      newAttrs += ' PrimitiveType="Cube"';
+      // Beam model — small cylinder, no .3ds file
+      newAttrs += ' PrimitiveType="Cylinder"';
+    } else if (modelFileMap[name]) {
+      newAttrs += ` File="${modelFileMap[name]}" PrimitiveType="Undefined"`;
     } else {
-      const file = modelFileMap[name] || 'head';
-      newAttrs += ` File="${file}" PrimitiveType="Undefined"`;
+      // Unknown model — use Cube primitive, no .3ds file
+      newAttrs += ' PrimitiveType="Cube"';
     }
     return `<Model ${newAttrs}${close}`;
   });
