@@ -197,43 +197,78 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 }
 .adv-body.open { max-height: 600px; }
 
+/* ─── FIXTURE TYPE CARDS ─── */
+.type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.type-card {
+  background: var(--raised);
+  border: 1.5px solid var(--border2);
+  border-radius: 8px;
+  padding: 14px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.type-card:hover { border-color: var(--amber); background: var(--amber-lo); }
+.type-card.active { border-color: var(--amber); background: var(--amber-lo); }
+.type-card svg { width: 36px; height: 36px; margin-bottom: 6px; display: block; margin: 0 auto 6px; }
+.type-card-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.type-card.active .type-card-label { color: var(--amber); }
+.type-card svg * { fill: var(--muted); transition: fill .15s; }
+.type-card.active svg * { fill: var(--amber); }
+
+/* ─── LOG TOGGLE ─── */
+.log-toggle {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; padding: 8px 0; margin-bottom: 4px;
+  color: var(--muted); font-size: 11px; font-family: var(--mono);
+  letter-spacing: .04em; user-select: none;
+  border: none; background: none; width: 100%; text-align: left;
+  transition: color .15s;
+}
+.log-toggle:hover { color: var(--text); }
+.log-arrow { font-size: 9px; transition: transform .2s; }
+.log-arrow.open { transform: rotate(180deg); }
+.log-body { overflow: hidden; max-height: 0; transition: max-height .25s ease; }
+.log-body.open { max-height: 300px; }
+
 /* ─── GENERATE BUTTON ─── */
 .btn-gen {
+  position: relative;
   width: 100%;
-  padding: 13px;
-  background: var(--amber);
-  color: #000;
-  border: none;
+  height: 280px;
+  background: #111113;
+  border: 1px solid var(--border2);
   border-radius: 8px;
-  font-family: var(--ui);
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: .02em;
   cursor: pointer;
-  transition: opacity .15s, transform .1s, box-shadow .15s;
+  overflow: hidden;
+  padding: 0;
   margin-top: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  transition: border-color .15s;
 }
-.btn-gen:hover:not(:disabled) {
-  opacity: .9;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 20px rgba(245,158,11,.25);
+.btn-gen:hover { border-color: var(--amber); }
+.btn-gen:disabled { opacity: .35; cursor: not-allowed; }
+.btn-text {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--amber); color: #000;
+  font-family: var(--ui); font-size: 16px; font-weight: 700;
+  letter-spacing: 4px; text-transform: uppercase;
+  border-radius: 8px; transition: opacity .2s;
+  pointer-events: none; z-index: 2;
 }
-.btn-gen:disabled { opacity: .35; cursor: not-allowed; transform: none; box-shadow: none; }
-.btn-gen .spin {
-  display: none;
-  width: 14px; height: 14px;
-  border: 2px solid rgba(0,0,0,.25);
-  border-top-color: #000;
-  border-radius: 50%;
-  animation: spin .5s linear infinite;
+.btn-loader {
+  position: absolute; inset: 0;
+  opacity: 0; transition: opacity .2s;
+  pointer-events: none; z-index: 1;
 }
-.btn-gen.loading .btn-text { display: none; }
-.btn-gen.loading .spin { display: block; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.btn-gen.loading .btn-text { opacity: 0; }
+.btn-gen.loading .btn-loader { opacity: 1; }
 
 /* ─── STATUS ─── */
 .status {
@@ -414,6 +449,38 @@ footer a:hover { color: var(--amber); }
       </div>
     </div>
 
+    <!-- Fixture Type Cards -->
+    <input type="hidden" id="model-type" value="spot">
+    <label style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-top:12px;display:block">Fixture Type</label>
+    <div class="type-grid">
+      <div class="type-card active" onclick="selectType('spot',this)">
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="18" cy="10" r="7"/>
+          <polygon points="10,18 8,36 28,36 26,18"/>
+        </svg>
+        <div class="type-card-label">Spot</div>
+      </div>
+      <div class="type-card" onclick="selectType('wash',this)">
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="18" cy="11" r="9"/>
+          <polygon points="10,20 8,36 28,36 26,20"/>
+        </svg>
+        <div class="type-card-label">Wash</div>
+      </div>
+      <div class="type-card" onclick="selectType('strobe',this)">
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="3" y="12" width="30" height="14" rx="2"/>
+        </svg>
+        <div class="type-card-label">Strobe</div>
+      </div>
+      <div class="type-card" onclick="selectType('bar',this)">
+        <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="1" y="14" width="34" height="8" rx="2"/>
+        </svg>
+        <div class="type-card-label">Bar</div>
+      </div>
+    </div>
+
     <!-- Advanced toggle -->
     <button class="adv-toggle" onclick="toggleAdv(this)">
       <span>Advanced</span>
@@ -444,31 +511,19 @@ footer a:hover { color: var(--amber); }
           <textarea id="extra-notes" style="min-height:60px" placeholder="Corrections, context, or anything else for the AI…"></textarea>
         </div>
 
-        <div class="row">
-          <div class="field">
-            <label>Fixture Type</label>
-            <select id="fixture-type">
-              <option value="auto">Auto-detect</option>
-              <option value="moving_bsw">Moving Head BSW</option>
-              <option value="moving_beam">Moving Head Beam</option>
-              <option value="moving_spot">Moving Head Spot</option>
-              <option value="moving_wash">Moving Head Wash</option>
-              <option value="led_par">LED PAR / Wash</option>
-              <option value="led_bar">LED Bar / Batten</option>
-              <option value="strobe">Strobe</option>
-              <option value="generic">Generic</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>3D Model</label>
-            <select id="model-type">
-              <option value="none">None (wireframe)</option>
-              <option value="spot" selected>Spot / Moving Head</option>
-              <option value="wash">Wash</option>
-              <option value="strobe">Strobe / Blinder</option>
-              <option value="bar">LED Bar</option>
-            </select>
-          </div>
+        <div class="field">
+          <label>Fixture Type</label>
+          <select id="fixture-type">
+            <option value="auto">Auto-detect</option>
+            <option value="moving_bsw">Moving Head BSW</option>
+            <option value="moving_beam">Moving Head Beam</option>
+            <option value="moving_spot">Moving Head Spot</option>
+            <option value="moving_wash">Moving Head Wash</option>
+            <option value="led_par">LED PAR / Wash</option>
+            <option value="led_bar">LED Bar / Batten</option>
+            <option value="strobe">Strobe</option>
+            <option value="generic">Generic</option>
+          </select>
         </div>
 
       </div>
@@ -476,8 +531,62 @@ footer a:hover { color: var(--amber); }
 
     <!-- Generate -->
     <button class="btn-gen" id="gen-btn" onclick="generate()">
-      <span class="btn-text">Generate GDTF</span>
-      <div class="spin"></div>
+      <span class="btn-text">&#9889; Generate GDTF</span>
+      <div class="btn-loader" id="btn-loader">
+        <svg viewBox="0 0 400 320" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="dmx-cg" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#1a1a22"/>
+              <stop offset="50%" stop-color="#2e2e3a"/>
+              <stop offset="100%" stop-color="#1a1a22"/>
+            </linearGradient>
+            <clipPath id="dmx-cc"><rect id="dmx-cr" x="0" y="0" width="0" height="320"/></clipPath>
+          </defs>
+          <polygon id="dmx-b1" points="200,112 178,0 222,0" fill="#f59e0b" opacity="0"/>
+          <polygon id="dmx-b2" points="200,112 155,0 245,0" fill="#f59e0b" opacity="0"/>
+          <polygon id="dmx-b3" points="200,112 128,0 272,0" fill="#f59e0b" opacity="0"/>
+          <rect x="166" y="118" width="68" height="82" fill="#1c1c26"/>
+          <rect x="166" y="118" width="10" height="82" fill="#141420"/>
+          <rect x="224" y="118" width="10" height="82" fill="#141420"/>
+          <ellipse cx="200" cy="118" rx="34" ry="10" fill="#21212e" stroke="#2a2a3a" stroke-width="1"/>
+          <ellipse cx="200" cy="200" rx="34" ry="10" fill="#18181f" stroke="#22222e" stroke-width="1"/>
+          <ellipse id="dmx-lens-off" cx="200" cy="118" rx="16" ry="5" fill="#111116" stroke="#252530" stroke-width="0.8"/>
+          <ellipse id="dmx-lens-on" cx="200" cy="118" rx="16" ry="5" fill="#f59e0b" opacity="0"/>
+          <rect x="130" y="200" width="140" height="52" rx="4" fill="#1c1c24"/>
+          <rect x="131" y="201" width="138" height="50" rx="3" fill="#21212c"/>
+          <rect x="132" y="201" width="136" height="3" rx="1" fill="#2a2a38"/>
+          <rect x="218" y="215" width="42" height="2" rx="1" fill="#171720"/>
+          <rect x="218" y="221" width="42" height="2" rx="1" fill="#171720"/>
+          <rect x="218" y="227" width="42" height="2" rx="1" fill="#171720"/>
+          <rect x="218" y="233" width="42" height="2" rx="1" fill="#171720"/>
+          <circle id="dmx-led1" cx="152" cy="216" r="5" fill="#0d0d14" stroke="#1a1a26" stroke-width="0.8"/>
+          <circle id="dmx-led2" cx="167" cy="216" r="5" fill="#0d0d14" stroke="#1a1a26" stroke-width="0.8"/>
+          <rect x="130" y="212" width="8" height="16" rx="2" fill="#111116" stroke="#1e1e28" stroke-width="0.5"/>
+          <circle cx="134" cy="216" r="1.1" fill="#07070b"/>
+          <circle cx="132" cy="222" r="1.1" fill="#07070b"/>
+          <circle cx="136" cy="222" r="1.1" fill="#07070b"/>
+          <g clip-path="url(#dmx-cc)">
+            <rect x="0" y="216" width="130" height="8" rx="4" fill="url(#dmx-cg)"/>
+            <line x1="20" y1="216" x2="20" y2="224" stroke="#0d0d0d" stroke-width="1"/>
+            <line x1="45" y1="216" x2="45" y2="224" stroke="#0d0d0d" stroke-width="1"/>
+            <line x1="70" y1="216" x2="70" y2="224" stroke="#0d0d0d" stroke-width="1"/>
+            <line x1="95" y1="216" x2="95" y2="224" stroke="#0d0d0d" stroke-width="1"/>
+          </g>
+          <g id="dmx-plug">
+            <rect x="-22" y="214" width="12" height="12" rx="4" fill="#0f0f14"/>
+            <rect x="-12" y="214.5" width="14" height="11" rx="2" fill="#2a2a34"/>
+            <rect x="-11" y="215" width="12" height="10" rx="1.5" fill="#30303c"/>
+            <rect x="-7" y="214.5" width="5" height="11" fill="#222230"/>
+            <circle cx="-1" cy="220" r="5.5" fill="#18181e" stroke="#28283a" stroke-width="0.8"/>
+            <circle cx="-1" cy="220" r="4" fill="#0e0e16"/>
+            <circle cx="-1" cy="216.5" r="0.9" fill="#3a3a4a"/>
+            <circle cx="-3.8" cy="222.5" r="0.9" fill="#3a3a4a"/>
+            <circle cx="1.8" cy="222.5" r="0.9" fill="#3a3a4a"/>
+            <rect x="-3" y="226" width="4" height="2.5" rx="0.5" fill="#1e1e2c"/>
+          </g>
+          <text id="dmx-stxt" x="200" y="290" text-anchor="middle" fill="#374151" font-size="11" font-family="JetBrains Mono, monospace" letter-spacing="2">INITIALISING</text>
+        </svg>
+      </div>
     </button>
 
     <!-- Status -->
@@ -495,7 +604,13 @@ footer a:hover { color: var(--amber); }
       <span class="output-meta" id="output-meta"></span>
     </div>
     <div class="val-grid" id="val-grid"></div>
-    <div class="xml-box" id="xml-box"></div>
+    <button class="log-toggle" onclick="toggleLog()">
+      <span>View Log</span>
+      <span class="log-arrow" id="log-arrow">&#9660;</span>
+    </button>
+    <div class="log-body" id="log-body">
+      <div class="xml-box" id="xml-box"></div>
+    </div>
     <button class="btn-dl" id="dl-btn" onclick="downloadGDTF()" disabled>
       ↓ Download .gdtf
     </button>
@@ -592,13 +707,17 @@ function handleFile(file) {
               document.getElementById('dmx-mode').value = ma3Mode[1];
             // Auto-detect 3D model type
             const classes = (xml.match(/class="([^"]+)"/g) || []).map(m => m.replace(/class="|"/g,'').toLowerCase());
-            const sel = document.getElementById('model-type');
             const instanceCount = (xml.match(/<Instance\s/g) || []).length;
+            let detectedType = 'spot';
             if (classes.some(c => c.includes('headmover'))) {
-              if (instanceCount > 6) sel.value = 'bar';
-              else if (xml.toLowerCase().includes('wash')) sel.value = 'wash';
-              else sel.value = 'spot';
-            } else if (classes.some(c => c.includes('strobe') || c.includes('blinder'))) sel.value = 'strobe';
+              if (instanceCount > 6) detectedType = 'bar';
+              else if (xml.toLowerCase().includes('wash')) detectedType = 'wash';
+              else detectedType = 'spot';
+            } else if (classes.some(c => c.includes('strobe') || c.includes('blinder'))) detectedType = 'strobe';
+            const cards = document.querySelectorAll('.type-card');
+            const typeMap = ['spot','wash','strobe','bar'];
+            const idx = typeMap.indexOf(detectedType);
+            if (idx !== -1) selectType(detectedType, cards[idx]);
           }).catch(() => {}); // auto-fill is best-effort
         }
       } catch(e) {} // auto-fill failure is non-critical
@@ -773,6 +892,84 @@ function validate(xml) {
   return results;
 }
 
+// ── Fixture Type Card selection
+function selectType(type, card) {
+  document.getElementById('model-type').value = type;
+  document.querySelectorAll('.type-card').forEach(c => c.classList.remove('active'));
+  if (card) card.classList.add('active');
+}
+
+// ── Log toggle
+function toggleLog() {
+  const body = document.getElementById('log-body');
+  const arrow = document.getElementById('log-arrow');
+  const open = body.classList.contains('open');
+  body.classList.toggle('open', !open);
+  arrow.classList.toggle('open', !open);
+}
+
+// ── DMX Cable Animation
+const DMX_MSGS = ['PATCHING DMX','BUILDING GDTF','MAPPING CHANNELS','FIXING OFFSETS','VALIDATING XML','PACKAGING ZIP'];
+let _dmxMsgI=0,_dmxMsgTmr=null,_dmxRaf=null,_dmxRunning=false;
+
+function dmxStartLoader(btn){
+  if(_dmxRunning)return;_dmxRunning=true;
+  btn.classList.add('loading');
+  _dmxResetAnim(false);_dmxMsgI=0;_dmxSetTxt(DMX_MSGS[0],'');
+  _dmxMsgTmr=setInterval(()=>{_dmxMsgI=(_dmxMsgI+1)%DMX_MSGS.length;_dmxSetTxt(DMX_MSGS[_dmxMsgI],'');},480);
+  const CABLE=2000,SEAT=380;
+  let t1=null,t2=null;
+  _dmxRaf=requestAnimationFrame(function p1(now){
+    if(!t1)t1=now;const e=_dmxEio(Math.min((now-t1)/CABLE,1));
+    document.getElementById('dmx-cr').setAttribute('width',e*126);
+    document.getElementById('dmx-plug').setAttribute('transform',`translate(${e*131},0)`);
+    if(e<1){_dmxRaf=requestAnimationFrame(p1);return;}
+    _dmxSetTxt('CONNECTING','#f59e0b');
+    _dmxRaf=requestAnimationFrame(function p2(now){
+      if(!t2)t2=now;const e2=_dmxEob(Math.min((now-t2)/SEAT,1));
+      document.getElementById('dmx-plug').setAttribute('transform',`translate(${131+e2*8},0)`);
+      document.getElementById('dmx-cr').setAttribute('width',126+e2*8);
+      if(e2<1){_dmxRaf=requestAnimationFrame(p2);return;}
+      clearInterval(_dmxMsgTmr);_dmxSetTxt('CONNECTED','#f59e0b');
+    });
+  });
+}
+
+function dmxFinishLoader(btn){
+  clearInterval(_dmxMsgTmr);cancelAnimationFrame(_dmxRaf);
+  let t3=null;
+  _dmxRaf=requestAnimationFrame(function p3(now){
+    if(!t3)t3=now;const e3=_dmxEio(Math.min((now-t3)/700,1));
+    document.getElementById('dmx-b1').setAttribute('opacity',e3*.75);
+    document.getElementById('dmx-b2').setAttribute('opacity',e3*.35);
+    document.getElementById('dmx-b3').setAttribute('opacity',e3*.12);
+    document.getElementById('dmx-lens-off').setAttribute('opacity',1-e3);
+    document.getElementById('dmx-lens-on').setAttribute('opacity',e3);
+    const r=Math.round(245*e3),g=Math.round(158*e3),b=Math.round(11*e3);
+    document.getElementById('dmx-led1').setAttribute('fill',`rgb(${r},${g},${b})`);
+    if(e3>.4){const eg=(e3-.4)/.6;const gr=Math.round(52*eg),gg=Math.round(211*eg),gb=Math.round(153*eg);
+    document.getElementById('dmx-led2').setAttribute('fill',`rgb(${gr},${gg},${gb})`);}
+    if(e3>.65)_dmxSetTxt('FIXTURE READY','#34d399');
+    if(e3<1){_dmxRaf=requestAnimationFrame(p3);return;}
+    setTimeout(()=>{btn.classList.remove('loading');_dmxResetAnim(true);_dmxRunning=false;},800);
+  });
+}
+
+function _dmxResetAnim(full){
+  if(!full)return;
+  document.getElementById('dmx-cr').setAttribute('width',0);
+  document.getElementById('dmx-plug').setAttribute('transform','translate(0,0)');
+  ['dmx-b1','dmx-b2','dmx-b3'].forEach(id=>document.getElementById(id).setAttribute('opacity',0));
+  document.getElementById('dmx-lens-off').setAttribute('opacity',1);
+  document.getElementById('dmx-lens-on').setAttribute('opacity',0);
+  document.getElementById('dmx-led1').setAttribute('fill','#0d0d14');
+  document.getElementById('dmx-led2').setAttribute('fill','#0d0d14');
+  _dmxSetTxt('INITIALISING','#374151');
+}
+function _dmxSetTxt(msg,color){const el=document.getElementById('dmx-stxt');if(!el)return;el.textContent=msg;el.setAttribute('fill',color||'#374151');}
+function _dmxEio(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+function _dmxEob(t){const c=2.70158;return 1+c*Math.pow(t-1,3)+(c-1)*Math.pow(t-1,2);}
+
 // ── Generate
 async function generate() {
   const fixtureName = document.getElementById('fixture-name').value.trim();
@@ -790,7 +987,7 @@ async function generate() {
   }
 
   const btn = document.getElementById('gen-btn');
-  btn.classList.add('loading'); btn.disabled = true;
+  dmxStartLoader(btn); btn.disabled = true;
   generatedXML = null;
 
   try {
@@ -883,7 +1080,7 @@ async function generate() {
   } catch(err) {
     setStatus('err', err.message);
   } finally {
-    btn.classList.remove('loading'); btn.disabled = false;
+    dmxFinishLoader(btn); btn.disabled = false;
   }
 }
 
