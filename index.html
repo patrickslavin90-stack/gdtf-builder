@@ -264,9 +264,11 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 }
 .btn-loader {
   position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
   opacity: 0; transition: opacity .2s;
   pointer-events: none; z-index: 1;
 }
+.btn-loader svg { width: 80%; height: 80%; max-width: 360px; }
 .btn-gen.loading .btn-text { opacity: 0; }
 .btn-gen.loading .btn-loader { opacity: 1; }
 
@@ -603,12 +605,12 @@ footer a:hover { color: var(--amber); }
       <span class="output-title" id="output-title">Ready</span>
       <span class="output-meta" id="output-meta"></span>
     </div>
-    <div class="val-grid" id="val-grid"></div>
     <button class="log-toggle" onclick="toggleLog()">
       <span>View Log</span>
       <span class="log-arrow" id="log-arrow">&#9660;</span>
     </button>
     <div class="log-body" id="log-body">
+      <div class="val-grid" id="val-grid"></div>
       <div class="xml-box" id="xml-box"></div>
     </div>
     <button class="btn-dl" id="dl-btn" onclick="downloadGDTF()" disabled>
