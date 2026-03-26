@@ -386,7 +386,43 @@ function postProcess(xml, parsedMA3) {
   xml = fixGeometryRefs(xml);
   xml = assignOffsets(xml);
   xml = injectInstances(xml, parsedMA3);
+  xml = fixGUID(xml);
+  xml = fixMasterAttribute(xml);
+  xml = fix16bitResolution(xml);
   return xml;
+}
+
+// Fix all-zeros or invalid GUIDs
+function fixGUID(xml) {
+  const crypto = require('crypto');
+  return xml.replace(/FixtureTypeID="([^"]*)"/, (m, guid) => {
+    if (!guid || guid === '00000000-0000-0000-0000-000000000000' || !/^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i.test(guid)) {
+      return `FixtureTypeID="${crypto.randomUUID().toUpperCase()}"`;
+    }
+    return m;
+  });
+}
+
+// Only Dimmer should have Master="Grand", everything else Master="None"
+function fixMasterAttribute(xml) {
+  // First set all to None
+  xml = xml.replace(/(<LogicalChannel\s[^>]*)Master="Grand"/g, (m, pre) => {
+    if (/Attribute="Dimmer"/.test(pre)) return m; // keep Dimmer as Grand
+    return `${pre}Master="None"`;
+  });
+  return xml;
+}
+
+// Fix 16-bit channels: if Offset has comma (e.g. "1,2"), resolution should be /2 not /1
+function fix16bitResolution(xml) {
+  return xml.replace(
+    /(<DMXChannel[^>]*Offset="(\d+,\d+)"[^>]*>)([\s\S]*?)(<\/DMXChannel>)/g,
+    (m, open, offset, body, close) => {
+      // Replace /1 with /2 in DMXFrom, DMXTo, Default within this channel
+      const fixed = body.replace(/(\b(?:DMXFrom|DMXTo|Default)=")(\d+)\/1"/g, '$1$2/2"');
+      return open + fixed + close;
+    }
+  );
 }
 
 // Export for background function and test.js
