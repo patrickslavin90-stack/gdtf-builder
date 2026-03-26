@@ -243,6 +243,8 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 .btn-gen {
   position: relative;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   height: 52px;
   background: #111113;
   border: 1px solid var(--border2);
@@ -269,11 +271,10 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 }
 .btn-loader {
   position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: stretch; justify-content: stretch;
   opacity: 0; transition: opacity .2s;
   pointer-events: none; z-index: 1;
 }
-.btn-loader svg { width: 100%; height: 100%; }
 .btn-gen.loading .btn-text { opacity: 0; }
 .btn-gen.loading .btn-loader { opacity: 1; }
 
