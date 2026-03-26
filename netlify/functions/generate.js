@@ -78,17 +78,17 @@ DMX VALUES:
 12. Every DMXChannel Geometry attribute MUST match EXACTLY a Name in the Geometries tree
 13. InitialFunction format: "GeoName_Attr.Attr.CFName" where GeoName matches the DMXChannel Geometry attribute
 14. Every ChannelFunction: Name="CFName" CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000" Default="value/1"
+15. Pan ChannelFunction MUST have PhysicalFrom="-270.000000" PhysicalTo="270.000000" (or fixture-specific range). Tilt MUST have PhysicalFrom="-135.000000" PhysicalTo="135.000000". These are REQUIRED for MA3 3D viewer pan/tilt control
 
 ATTRIBUTES:
-15. Use AttributeDefinitions > FeatureGroups + Attributes (NOT bare <Features> or <Attributes> at FixtureType level)
-16. Attribute Feature format: "FeatureGroupName.FeatureName" (e.g. "Dimmer.Dimmer", "Color.RGB")
-17. ColorAdd_R/G/B: Feature="Color.RGB" PhysicalUnit="ColorComponent"
-18. No periods (.) in ChannelSet Name attributes
-19. Master="Grand" on Dimmer LogicalChannel
+16. Use AttributeDefinitions > FeatureGroups + Attributes (NOT bare <Features> or <Attributes> at FixtureType level)
+17. Attribute Feature format: "FeatureGroupName.FeatureName" (e.g. "Dimmer.Dimmer", "Color.RGB")
+18. ColorAdd_R/G/B: Feature="Color.RGB" PhysicalUnit="ColorComponent"
+19. No periods (.) in ChannelSet Name attributes
+20. Master="Grand" on Dimmer LogicalChannel
 
 GEOMETRY:
-20. DMXMode Geometry="Body" must reference the TOP-LEVEL geometry Name. For moving heads, geometry tree MUST be: Body (Model="Base") > Yoke (Axis, Model="Yoke") > Head (Axis, Model="Head") > Beam. Pan channels reference "Yoke", Tilt channels reference "Head", beam attributes reference "Head" or "Beam"
-21. Pure rotation Axis elements have NO Model attribute
+21. DMXMode Geometry="Body" must reference the TOP-LEVEL geometry Name. For moving heads, geometry tree MUST be: Body (Model="Base") > Yoke (Axis, Model="Yoke") > Head (Axis, Model="Head") > Beam. Pan channels reference "Yoke", Tilt channels reference "Head", beam attributes reference "Head" or "Beam"
 22. All Beam elements: RectangleRatio="1.777700" ThrowRatio="1.000000"
 23. All Model elements need all 6 SVG offset attributes set to "0.000000"
 
