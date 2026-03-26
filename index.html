@@ -824,8 +824,36 @@ async function generate() {
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    let data;
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error('Server returned an error — the fixture may be too complex. Please try again.');
+    }
+    data = await res.json();
+
+    // Handle async background generation (complex fixtures)
+    if (data.jobId && data.status === 'processing') {
+      setStatus('busy', 'Complex fixture detected — generating in background…');
+      let attempts = 0;
+      while (attempts < 60) { // poll for up to 2 minutes
+        await new Promise(r => setTimeout(r, 3000));
+        attempts++;
+        setStatus('busy', `Generating… (${attempts * 3}s)`);
+        const pollRes = await fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId: data.jobId, poll: true }),
+        });
+        const pollData = await pollRes.json();
+        if (pollData.status === 'complete' && pollData.xml) { data = pollData; break; }
+        if (pollData.status === 'error') throw new Error(pollData.error || 'Background generation failed');
+        if (pollData.status === 'processing') continue;
+        if (pollData.xml) { data = pollData; break; }
+      }
+      if (!data.xml) throw new Error('Generation timed out — please try again with fewer channels');
+    }
+
+    if (!res.ok && !data.xml) throw new Error(data.error || `HTTP ${res.status}`);
 
     let xml = data.xml;
     // Clean up any markdown/preamble Gemini sometimes adds

@@ -316,7 +316,86 @@ function fixGeometryRefs(xml) {
   });
 }
 
-// Standard Netlify Function
+// ── Core generation logic (shared between sync and background) ──
+function prepareRequest(body) {
+  let { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes, existingXml, ma3Xml, ma3XmlpBase64 } = body;
+
+  if (ma3XmlpBase64 && !ma3Xml) {
+    const zlib = require('zlib');
+    const buf = Buffer.from(ma3XmlpBase64, 'base64');
+    const decompressed = zlib.gunzipSync(buf).toString('utf8');
+    const xmlStart = decompressed.indexOf('<?xml');
+    ma3Xml = xmlStart !== -1 ? decompressed.slice(xmlStart) : decompressed;
+    if (!fixtureName) { const m = ma3Xml.match(/FixtureType\s+name="([^"]+)"/); if (m) fixtureName = m[1]; }
+    if (!manufacturer) { const m = ma3Xml.match(/<manufacturer>([^<]+)<\/manufacturer>/); if (m) manufacturer = m[1]; }
+    if (!dmxMode) { const m = ma3Xml.match(/FixtureType[^>]+mode="([^"]+)"/); if (m) dmxMode = m[1]; }
+  }
+
+  const parsedMA3 = parseMA3Xml(ma3Xml || existingXml || channels || '');
+  const promptParts = [];
+  if (manufacturer) promptParts.push(`Manufacturer: ${manufacturer}`);
+  if (fixtureName)  promptParts.push(`Fixture Name: ${fixtureName}`);
+  if (shortName)    promptParts.push(`Short Name: ${shortName}`);
+  if (dmxMode)      promptParts.push(`DMX Mode Name: ${dmxMode}`);
+  if (fixtureType && fixtureType !== 'auto') promptParts.push(`Fixture Type: ${fixtureType}`);
+
+  let prompt = promptParts.join('\n') + '\n\n';
+  if (existingXml) prompt += `EXISTING GDTF XML (repair/upgrade):\n${existingXml.slice(0, 15000)}\n\n`;
+  if (channels)    prompt += `DMX CHANNEL LIST:\n${channels}\n\n`;
+  if (notes)       prompt += `ADDITIONAL NOTES:\n${notes}\n\n`;
+  const instancePrompt = buildInstancePrompt(parsedMA3);
+  if (instancePrompt) prompt += instancePrompt + '\n';
+  prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
+
+  return { prompt, parsedMA3, maxTokens: parsedMA3 ? 16384 : 32768 };
+}
+
+async function callGemini(apiKey, prompt, maxTokens) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`Gemini ${res.status}: ${err.error?.message || 'Unknown'}`);
+  }
+  const data = await res.json();
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  let xml = '';
+  for (const part of parts) { if (!part.thought) xml += (part.text || ''); }
+  if (!xml && parts.length) xml = parts[parts.length - 1]?.text || '';
+  return xml;
+}
+
+function postProcess(xml, parsedMA3) {
+  xml = xml.replace(/```xml\n?/gi, '').replace(/```\n?/g, '').trim();
+  const xs = xml.indexOf('<?xml'), xe = xml.lastIndexOf('</GDTF>');
+  if (xs !== -1 && xe !== -1) xml = xml.slice(xs, xe + 7);
+  else { const gs = xml.indexOf('<GDTF'); if (gs !== -1 && xe !== -1) xml = xml.slice(gs, xe + 7); }
+  if (!xml.includes('<GDTF')) throw new Error('No valid GDTF XML in response — try again');
+  xml = stripNamespaces(xml);
+  xml = fixManufacturer(xml);
+  xml = fixGeometryRefs(xml);
+  xml = assignOffsets(xml);
+  xml = injectInstances(xml, parsedMA3);
+  return xml;
+}
+
+// Export for background function and test.js
+exports.SYSTEM_PROMPT = SYSTEM_PROMPT;
+exports.prepareRequest = prepareRequest;
+exports.callGemini = callGemini;
+exports.postProcess = postProcess;
+
+// Standard Netlify Function — tries sync, falls back to async for complex fixtures
 exports.handler = async function(event) {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -334,105 +413,43 @@ exports.handler = async function(event) {
   try { body = JSON.parse(event.body || '{}'); }
   catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) }; }
 
-  let { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes, existingXml, ma3Xml, ma3XmlpBase64 } = body;
-
-  // Decompress base64 gzip .xmlp on the server
-  if (ma3XmlpBase64 && !ma3Xml) {
+  // If client is polling for a job result, handle that
+  if (body.jobId && body.poll) {
     try {
-      const zlib = require('zlib');
-      const buf = Buffer.from(ma3XmlpBase64, 'base64');
-      const decompressed = zlib.gunzipSync(buf).toString('utf8');
-      const xmlStart = decompressed.indexOf('<?xml');
-      ma3Xml = xmlStart !== -1 ? decompressed.slice(xmlStart) : decompressed;
-
-      // Auto-extract fixture info if not provided
-      if (!fixtureName) { const m = ma3Xml.match(/FixtureType\s+name="([^"]+)"/); if (m) fixtureName = m[1]; }
-      if (!manufacturer) { const m = ma3Xml.match(/<manufacturer>([^<]+)<\/manufacturer>/); if (m) manufacturer = m[1]; }
-      if (!dmxMode) { const m = ma3Xml.match(/FixtureType[^>]+mode="([^"]+)"/); if (m) dmxMode = m[1]; }
+      const { getStore } = await import('@netlify/blobs');
+      const store = getStore({ name: 'gdtf-jobs', consistency: 'strong' });
+      const result = await store.get(body.jobId, { type: 'json' });
+      if (!result) return { statusCode: 200, headers, body: JSON.stringify({ status: 'processing' }) };
+      await store.delete(body.jobId); // clean up
+      return { statusCode: 200, headers, body: JSON.stringify(result) };
     } catch(e) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Failed to decompress .xmlp: ' + e.message }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ status: 'processing' }) };
     }
   }
-
-  if (!fixtureName && !channels && !existingXml && !ma3Xml) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Provide fixture name, channels, or existing XML' }) };
-  }
-
-  // Parse MA3 patch XML if provided
-  const parsedMA3 = parseMA3Xml(ma3Xml || existingXml || channels || '');
-
-  const promptParts = [];
-  if (manufacturer) promptParts.push(`Manufacturer: ${manufacturer}`);
-  if (fixtureName)  promptParts.push(`Fixture Name: ${fixtureName}`);
-  if (shortName)    promptParts.push(`Short Name: ${shortName}`);
-  if (dmxMode)      promptParts.push(`DMX Mode Name: ${dmxMode}`);
-  if (fixtureType && fixtureType !== 'auto') promptParts.push(`Fixture Type: ${fixtureType}`);
-
-  let prompt = promptParts.join('\n') + '\n\n';
-  if (existingXml) prompt += `EXISTING GDTF XML (repair/upgrade):\n${existingXml.slice(0, 15000)}\n\n`;
-  if (channels)    prompt += `DMX CHANNEL LIST:\n${channels}\n\n`;
-  if (notes)       prompt += `ADDITIONAL NOTES:\n${notes}\n\n`;
-
-  // Add parsed MA3 instance structure to prompt
-  const instancePrompt = buildInstancePrompt(parsedMA3);
-  if (instancePrompt) prompt += instancePrompt + '\n';
-
-  prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
-
-  // Use smaller token limit when we already have parsed structure (faster response)
-  const maxTokens = parsedMA3 ? 16384 : 32768;
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
-        }),
-      }
-    );
+    const { prompt, parsedMA3, maxTokens } = prepareRequest(body);
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      return { statusCode: 502, headers, body: JSON.stringify({ error: `Gemini ${res.status}: ${err.error?.message || 'Unknown'}` }) };
-    }
-
-    const data = await res.json();
-
-    // Gemini 2.5 Flash returns thinking + response as separate parts
-    // parts[0] is often { thought: true, text: "reasoning..." }
-    // The actual XML is in the non-thought part(s)
-    const parts = data.candidates?.[0]?.content?.parts || [];
-    let xml = '';
-    for (const part of parts) {
-      if (!part.thought) xml += (part.text || '');
-    }
-    // Fallback: if all parts were thought parts, use the last one
-    if (!xml && parts.length) xml = parts[parts.length - 1]?.text || '';
-
-    if (!xml) return { statusCode: 502, headers, body: JSON.stringify({ error: 'Empty Gemini response' }) };
-
-    // Clean up
-    xml = xml.replace(/```xml\n?/gi, '').replace(/```\n?/g, '').trim();
-    const xs = xml.indexOf('<?xml'), xe = xml.lastIndexOf('</GDTF>');
-    if (xs !== -1 && xe !== -1) xml = xml.slice(xs, xe + 7);
-    else { const gs = xml.indexOf('<GDTF'); if (gs !== -1 && xe !== -1) xml = xml.slice(gs, xe + 7); }
-    if (!xml.includes('<GDTF')) return { statusCode: 502, headers, body: JSON.stringify({ error: 'No valid GDTF XML in response — try again' }) };
-
-    // Post-process fixes
-    xml = stripNamespaces(xml);
-    xml = fixManufacturer(xml);
-    xml = fixGeometryRefs(xml);
-    xml = assignOffsets(xml);
-    xml = injectInstances(xml, parsedMA3);
-
+    // Try synchronous generation first (works for simple fixtures)
+    const rawXml = await callGemini(apiKey, prompt, maxTokens);
+    if (!rawXml) return { statusCode: 502, headers, body: JSON.stringify({ error: 'Empty Gemini response' }) };
+    const xml = postProcess(rawXml, parsedMA3);
     return { statusCode: 200, headers, body: JSON.stringify({ xml }) };
 
   } catch (err) {
+    // If it looks like a timeout or complex fixture, try background generation
+    if (err.message && (err.message.includes('timeout') || err.message.includes('aborted'))) {
+      try {
+        const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        const siteUrl = process.env.URL || 'https://gdtf.netlify.app';
+        await fetch(`${siteUrl}/.netlify/functions/generate-background`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobId, ...body }),
+        });
+        return { statusCode: 200, headers, body: JSON.stringify({ jobId, status: 'processing' }) };
+      } catch(e) { /* fall through to error */ }
+    }
     return { statusCode: 500, headers, body: JSON.stringify({ error: `Server error: ${err.message}` }) };
   }
 };
