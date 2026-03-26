@@ -172,29 +172,219 @@ function parseMA3Xml(xml) {
   return { modules, instances, grouped };
 }
 
-// Map MA3 attribute names to standard GDTF attribute names
-const MA3_TO_GDTF = {
-  PAN: 'Pan', TILT: 'Tilt', DIM: 'Dimmer', DIMMER: 'Dimmer',
-  SHUTTER: 'Shutter', SHUTTER2: 'Shutter2',
-  COLORRGB1: 'ColorAdd_R (Red)', COLORRGB2: 'ColorAdd_G (Green)', COLORRGB3: 'ColorAdd_B (Blue)',
-  COLORRGB4: 'ColorAdd_W (White)', COLORRGB5: 'ColorAdd_W (White)',
-  COLOR1: 'Color1 (Color Wheel)', CTO: 'CTO', CTC: 'CTO',
-  COLORMIXER: 'ColorMixer', COLORMIXER2: 'ColorMixer2',
-  COLORTEMPERATURE: 'ColorTemperature',
-  GOBO1: 'Gobo1', GOBO1_POS: 'Gobo1Pos (Gobo 1 Rotation)', GOBO2: 'Gobo2', GOBO2_POS: 'Gobo2Pos',
-  ZOOM: 'Zoom', FOCUS: 'Focus', FOCUSMODE: 'FocusMode',
-  IRIS: 'Iris', FROST: 'Frost', PRISM: 'Prism1', PRISM_POS: 'Prism1Pos',
-  EFFECTWHEEL: 'Effects1 (Effect Wheel)', EFFECTINDEXROTATE: 'Effects1Pos (Effect Rotate)',
-  ANIMATIONWHEEL: 'AnimationWheel1',
-  POSITIONMSPEED: 'PositionSpeed', EFFECTMACROS: 'EffectMacros',
-  PWMFREQUENCY: 'Control1 (PWM Frequency)',
-  LEDENGINEEFFECTS: 'LEDEffect1', LEDENGINEEFFECTRATE: 'LEDEffect1Rate',
-  LEDENGINEEFFECTSTEPTIME: 'LEDEffect1FadeTime',
-  FIXTUREGLOBALRESET: 'FixtureGlobalReset', MACROSELECT: 'MacroSelect',
+// ── MA3 → GDTF attribute mapping with full metadata ──
+const ATTR_DB = {
+  PAN:          { gdtf: 'Pan',               pretty: 'Pan',               feature: 'Position.Pan',       physical: 'Angle',          geo: 'Yoke', physFrom: -270, physTo: 270, master: 'None' },
+  TILT:         { gdtf: 'Tilt',              pretty: 'Tilt',              feature: 'Position.Tilt',      physical: 'Angle',          geo: 'Head', physFrom: -135, physTo: 135, master: 'None' },
+  DIM:          { gdtf: 'Dimmer',            pretty: 'Dimmer',            feature: 'Dimmer.Dimmer',      physical: 'None',           geo: 'Beam', master: 'Grand', default0: true },
+  DIMMER:       { gdtf: 'Dimmer',            pretty: 'Dimmer',            feature: 'Dimmer.Dimmer',      physical: 'None',           geo: 'Beam', master: 'Grand', default0: true },
+  SHUTTER:      { gdtf: 'Shutter1',          pretty: 'Shutter',           feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam' },
+  SHUTTER2:     { gdtf: 'Shutter2',          pretty: 'Shutter 2',        feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam' },
+  COLORRGB1:    { gdtf: 'ColorAdd_R',        pretty: 'Red',              feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB2:    { gdtf: 'ColorAdd_G',        pretty: 'Green',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB3:    { gdtf: 'ColorAdd_B',        pretty: 'Blue',             feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB4:    { gdtf: 'ColorAdd_W',        pretty: 'White',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB5:    { gdtf: 'ColorAdd_W',        pretty: 'White',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLOR1:       { gdtf: 'Color1',            pretty: 'Color Wheel',      feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  CTO:          { gdtf: 'CTO',              pretty: 'CTO',              feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Beam' },
+  CTC:          { gdtf: 'CTO',              pretty: 'CTO',              feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Beam' },
+  COLORMIXER:   { gdtf: 'ColorMixer1',       pretty: 'Color Mixer',      feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  COLORMIXER2:  { gdtf: 'ColorMixer2',       pretty: 'Color Mixer 2',    feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  COLORTEMPERATURE: { gdtf: 'ColorTemperature', pretty: 'Color Temp',    feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Beam' },
+  GOBO1:        { gdtf: 'Gobo1',             pretty: 'Gobo 1',           feature: 'Gobo.Gobo',          physical: 'None',           geo: 'Beam' },
+  GOBO1_POS:    { gdtf: 'Gobo1Pos',          pretty: 'Gobo 1 Rotate',    feature: 'Gobo.Gobo',          physical: 'Angle',          geo: 'Beam' },
+  GOBO2:        { gdtf: 'Gobo2',             pretty: 'Gobo 2',           feature: 'Gobo.Gobo',          physical: 'None',           geo: 'Beam' },
+  GOBO2_POS:    { gdtf: 'Gobo2Pos',          pretty: 'Gobo 2 Rotate',    feature: 'Gobo.Gobo',          physical: 'Angle',          geo: 'Beam' },
+  ZOOM:         { gdtf: 'Zoom',             pretty: 'Zoom',             feature: 'Beam.Zoom',          physical: 'Angle',          geo: 'Beam', physFrom: 7, physTo: 55 },
+  FOCUS:        { gdtf: 'Focus1',            pretty: 'Focus',            feature: 'Beam.Focus',         physical: 'None',           geo: 'Beam' },
+  FOCUSMODE:    { gdtf: 'FocusMode',         pretty: 'Focus Mode',       feature: 'Beam.Focus',         physical: 'None',           geo: 'Beam' },
+  IRIS:         { gdtf: 'Iris',              pretty: 'Iris',             feature: 'Beam.Iris',          physical: 'None',           geo: 'Beam', physFrom: 0, physTo: 1 },
+  FROST:        { gdtf: 'Frost1',            pretty: 'Frost',            feature: 'Beam.Frost',         physical: 'None',           geo: 'Beam' },
+  PRISM:        { gdtf: 'Prism1',            pretty: 'Prism',            feature: 'Beam.Prism',         physical: 'None',           geo: 'Beam' },
+  PRISM_POS:    { gdtf: 'Prism1Pos',         pretty: 'Prism Rotate',     feature: 'Beam.Prism',         physical: 'Angle',          geo: 'Beam' },
+  EFFECTWHEEL:  { gdtf: 'Effects1',          pretty: 'Effect Wheel',     feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
+  EFFECTINDEXROTATE: { gdtf: 'Effects1Pos',  pretty: 'Effect Rotate',    feature: 'Effect.Effect',      physical: 'Angle',          geo: 'Beam' },
+  ANIMATIONWHEEL: { gdtf: 'AnimationWheel1', pretty: 'Animation Wheel',  feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
+  POSITIONMSPEED: { gdtf: 'PositionSpeed',   pretty: 'Movement Speed',   feature: 'Position.Speed',     physical: 'None',           geo: 'Head' },
+  EFFECTMACROS: { gdtf: 'EffectMacros',      pretty: 'Effect Macros',    feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
+  PWMFREQUENCY: { gdtf: 'Control1',          pretty: 'PWM Frequency',    feature: 'Control.Control',    physical: 'Frequency',      geo: 'Beam' },
+  LEDENGINEEFFECTS: { gdtf: 'LEDEffect1',    pretty: 'LED Effects',      feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
+  LEDENGINEEFFECTRATE: { gdtf: 'LEDEffect1Rate', pretty: 'LED Effect Rate', feature: 'Effect.Effect',   physical: 'None',           geo: 'Beam' },
+  LEDENGINEEFFECTSTEPTIME: { gdtf: 'LEDEffect1FadeTime', pretty: 'LED Effect Step', feature: 'Effect.Effect', physical: 'None',     geo: 'Beam' },
+  FIXTUREGLOBALRESET: { gdtf: 'FixtureGlobalReset', pretty: 'Reset',    feature: 'Control.Control',    physical: 'None',           geo: 'Beam' },
+  MACROSELECT:  { gdtf: 'MacroSelect',       pretty: 'Macro',            feature: 'Control.Control',    physical: 'None',           geo: 'Beam' },
 };
 
+function lookupAttr(ma3Name) {
+  return ATTR_DB[ma3Name.toUpperCase()] || {
+    gdtf: ma3Name, pretty: ma3Name, feature: 'Control.Control', physical: 'None', geo: 'Beam'
+  };
+}
+
 function translateMA3Attr(attr) {
-  return MA3_TO_GDTF[attr.toUpperCase()] || attr;
+  const info = ATTR_DB[attr.toUpperCase()];
+  return info ? `${info.gdtf} (${info.pretty})` : attr;
+}
+
+// ── Deterministic GDTF builder from parsed MA3 data (no Gemini needed) ──
+function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmxMode, fixtureType }) {
+  const crypto = require('crypto');
+  const guid = crypto.randomUUID().toUpperCase();
+  const mfr = manufacturer || 'Unknown';
+  const name = fixtureName || 'Fixture';
+  const short = shortName || name.slice(0, 10);
+  const mode = dmxMode || 'Standard';
+
+  // Collect all unique attributes and features
+  const attrs = new Map(); // gdtf name → attr info
+  const features = new Map(); // featureGroup.feature → true
+  const allChannels = []; // { attr info, coarse, fine, moduleIndex }
+
+  for (let i = 0; i < parsed.modules.length; i++) {
+    const mod = parsed.modules[i];
+    const patches = parsed.grouped[i] || [];
+    const isPixel = patches.length > 1;
+    for (const ch of mod.channels) {
+      const info = lookupAttr(ch.attribute);
+      // For pixel modules, override geo to 'Beam' (the template geometry)
+      const geo = isPixel ? 'Beam' : info.geo;
+      const entry = { ...info, geo, coarse: ch.coarse, fine: ch.fine, moduleIndex: i, isPixel };
+      allChannels.push(entry);
+      if (!attrs.has(info.gdtf)) attrs.set(info.gdtf, info);
+      features.set(info.feature, true);
+    }
+  }
+
+  // Build FeatureGroups
+  const featureGroups = new Map();
+  for (const feat of features.keys()) {
+    const [group, name] = feat.split('.');
+    if (!featureGroups.has(group)) featureGroups.set(group, new Set());
+    featureGroups.get(group).add(name);
+  }
+
+  let xml = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<GDTF DataVersion="1.2">
+  <FixtureType Name="${name}" LongName="${mfr} ${name}" ShortName="${short}" Manufacturer="${mfr}" Description="" FixtureTypeID="${guid}" CanHaveChildren="Yes" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
+    <AttributeDefinitions>
+      <FeatureGroups>
+`;
+  for (const [group, feats] of featureGroups) {
+    xml += `        <FeatureGroup Name="${group}">`;
+    for (const f of feats) xml += `<Feature Name="${f}"/>`;
+    xml += `</FeatureGroup>\n`;
+  }
+  xml += `      </FeatureGroups>
+      <Attributes>\n`;
+  for (const [gdtfName, info] of attrs) {
+    const phys = info.physical !== 'None' ? ` PhysicalUnit="${info.physical}"` : '';
+    xml += `        <Attribute Name="${gdtfName}" Feature="${info.feature}"${phys} Pretty="${info.pretty}"/>\n`;
+  }
+  xml += `      </Attributes>
+    </AttributeDefinitions>
+    <Wheels/>
+    <PhysicalDescriptions>
+      <ColorSpace Mode="sRGB" Name=""/>
+      <AdditionalColorSpaces/><Gamuts/><Filters/><Emitters/><DMXProfiles/><CRIs/>
+      <Connectors/><Properties><OperatingTemperature High="40.000000" Low="0.000000"/><Weight Value="0.000000"/><LegHeight Value="0.000000"/></Properties>
+    </PhysicalDescriptions>
+    <Models>
+      <Model Name="Base" Primitive="Cube" Length="0.300000" Width="0.300000" Height="0.150000" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
+      <Model Name="Yoke" Primitive="Cube" Length="0.400000" Width="0.100000" Height="0.300000" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
+      <Model Name="Head" Primitive="Cube" Length="0.250000" Width="0.250000" Height="0.300000" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
+      <Model Name="BeamModel" Primitive="Cylinder" Length="0.080000" Width="0.080000" Height="0.010000" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
+    </Models>
+    <Geometries>
+      <Geometry Name="Base" Model="Base" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,0.000000}{0,0,0,1}">
+        <Axis Name="Yoke" Model="Yoke" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.265000}{0,0,0,1}">
+          <Axis Name="Head" Model="Head" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.100000}{0,0,0,1}">\n`;
+
+  // Check for pixel modules — add GeometryReferences
+  const pixelModules = [];
+  for (let i = 0; i < parsed.modules.length; i++) {
+    const patches = parsed.grouped[i] || [];
+    if (patches.length > 1) pixelModules.push({ moduleIndex: i, patches, name: parsed.modules[i].name });
+  }
+
+  if (pixelModules.length > 0) {
+    for (const pm of pixelModules) {
+      for (let j = 0; j < pm.patches.length; j++) {
+        xml += `            <GeometryReference Geometry="PixelBeam" Model="BeamModel" Name="${pm.name} ${j + 1}" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.150000}{0,0,0,1}">
+              <Break DMXBreak="1" DMXOffset="${pm.patches[j]}"/>
+            </GeometryReference>\n`;
+      }
+    }
+  }
+
+  xml += `            <Beam Name="Beam" Model="BeamModel" LampType="LED" BeamType="${fixtureType === 'wash' ? 'Wash' : 'Spot'}" BeamAngle="1.000000" BeamRadius="0.025000" FieldAngle="25.000000" RectangleRatio="1.777700" ThrowRatio="1.000000" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.150000}{0,0,0,1}"/>
+          </Axis>
+        </Axis>
+      </Geometry>\n`;
+
+  // Add pixel beam template if needed
+  if (pixelModules.length > 0) {
+    xml += `      <Beam Name="PixelBeam" Model="BeamModel" LampType="LED" BeamType="Wash" BeamAngle="1.000000" BeamRadius="0.025000" FieldAngle="25.000000" RectangleRatio="1.777700" ThrowRatio="1.000000" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,0.000000}{0,0,0,1}"/>\n`;
+  }
+
+  xml += `    </Geometries>
+    <DMXModes>
+      <DMXMode Name="${mode}" Geometry="Base" Description="">
+        <DMXChannels>\n`;
+
+  // Build DMXChannels — main module channels first, then pixel template channels
+  for (const ch of allChannels) {
+    if (ch.isPixel) continue; // pixel channels come after main channels
+    const res = ch.fine ? '2' : '1';
+    const offset = ch.fine ? `${ch.coarse},${ch.fine}` : `${ch.coarse}`;
+    const defVal = ch.default0 ? '0' : (ch.default255 ? '255' : '0');
+    const geo = ch.geo;
+    const master = ch.master || 'None';
+    let physAttrs = '';
+    if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
+
+    xml += `          <DMXChannel DMXBreak="1" Offset="${offset}" Geometry="${geo}" InitialFunction="${geo}_${ch.gdtf}.${ch.gdtf}.${ch.pretty} 1">
+            <LogicalChannel Attribute="${ch.gdtf}" Master="${master}">
+              <ChannelFunction Name="${ch.pretty} 1" Attribute="${ch.gdtf}" DMXFrom="0/${res}" Default="${defVal}/${res}"${physAttrs} CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000"/>
+            </LogicalChannel>
+          </DMXChannel>\n`;
+  }
+
+  // Pixel template channels (defined once, replicated by GeometryReference)
+  const pixelChannels = allChannels.filter(c => c.isPixel);
+  if (pixelChannels.length > 0) {
+    // Use relative offsets starting at 1
+    let pixelOffset = 1;
+    for (const ch of pixelChannels) {
+      const res = ch.fine ? '2' : '1';
+      const offset = ch.fine ? `${pixelOffset},${pixelOffset + 1}` : `${pixelOffset}`;
+      const defVal = ch.default0 ? '0' : (ch.default255 ? '255' : '0');
+      let physAttrs = '';
+      if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
+
+      xml += `          <DMXChannel DMXBreak="1" Offset="${offset}" Geometry="PixelBeam" InitialFunction="PixelBeam_${ch.gdtf}.${ch.gdtf}.${ch.pretty} 1">
+            <LogicalChannel Attribute="${ch.gdtf}" Master="${ch.master || 'None'}">
+              <ChannelFunction Name="${ch.pretty} 1" Attribute="${ch.gdtf}" DMXFrom="0/${res}" Default="${defVal}/${res}"${physAttrs} CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000"/>
+            </LogicalChannel>
+          </DMXChannel>\n`;
+      pixelOffset += ch.fine ? 2 : 1;
+    }
+  }
+
+  xml += `        </DMXChannels>
+      </DMXMode>
+    </DMXModes>
+    <Revisions><Revision Date="${new Date().toISOString().split('T')[0]}T00:00:00" ModifiedBy="LMNR GDTF Builder" Text="rev 1" UserID="0"/></Revisions>
+    <FTPresets/><Protocols/>
+  </FixtureType>
+</GDTF>`;
+
+  return xml;
+}
+
+// Legacy translate function for prompt building
+function translateMA3Attr(attr) {
+  const info = ATTR_DB[attr.toUpperCase()];
+  return info ? `${info.gdtf} (${info.pretty})` : attr;
 }
 
 // Build instance info string for the Gemini prompt
@@ -570,12 +760,19 @@ exports.handler = async function(event) {
 
   try {
     const { prompt, parsedMA3, expectedFootprint, expectedChannels } = prepareRequest(body);
-    const isComplex = (expectedChannels || 0) > 15;
 
-    // Try synchronous generation first (works for simple fixtures)
-    const rawXml = await callGemini(apiKey, prompt, isComplex);
-    if (!rawXml) return { statusCode: 502, headers, body: JSON.stringify({ error: 'Empty Gemini response' }) };
-    const xml = postProcess(rawXml, parsedMA3);
+    let xml;
+
+    // For .xmlp uploads with parsed MA3 data: build GDTF deterministically (no Gemini needed)
+    if (parsedMA3 && (body.ma3XmlpBase64 || body.ma3Xml)) {
+      xml = buildGDTFFromParsed(parsedMA3, body);
+    } else {
+      // Text input — use Gemini
+      const isComplex = (expectedChannels || 0) > 15;
+      const rawXml = await callGemini(apiKey, prompt, isComplex);
+      if (!rawXml) return { statusCode: 502, headers, body: JSON.stringify({ error: 'Empty Gemini response' }) };
+      xml = postProcess(rawXml, parsedMA3);
+    }
 
     // Validate channel count
     const actualChannels = (xml.match(/<DMXChannel[\s>]/g) || []).length;
@@ -583,7 +780,9 @@ exports.handler = async function(event) {
     if (expectedChannels && actualChannels !== expectedChannels) {
       warnings.push(`Expected ${expectedChannels} DMXChannels but generated ${actualChannels}`);
     }
-    if (expectedFootprint) {
+    // Skip slot count check for multi-instance fixtures (pixel channels use relative offsets)
+    const hasGeoRef = xml.includes('<GeometryReference');
+    if (expectedFootprint && !hasGeoRef) {
       const offsets = [...xml.matchAll(/Offset="([^"]+)"/g)].map(m => m[1]);
       let actualSlots = 0;
       for (const o of offsets) actualSlots += o.includes(',') ? o.split(',').length : 1;
