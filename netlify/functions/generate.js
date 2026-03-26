@@ -213,6 +213,32 @@ const ATTR_DB = {
   LEDENGINEEFFECTSTEPTIME: { gdtf: 'LEDEffect1FadeTime', pretty: 'LED Effect Step', feature: 'Effect.Effect', physical: 'None',     geo: 'Beam' },
   FIXTUREGLOBALRESET: { gdtf: 'FixtureGlobalReset', pretty: 'Reset',    feature: 'Control.Control',    physical: 'None',           geo: 'Beam' },
   MACROSELECT:  { gdtf: 'MacroSelect',       pretty: 'Macro',            feature: 'Control.Control',    physical: 'None',           geo: 'Beam' },
+  // Multi-dimmer fixtures (JDC-1 beam/plate/strobe dimmers)
+  DIM2:         { gdtf: 'Dimmer2',           pretty: 'Dimmer 2',         feature: 'Dimmer.Dimmer',      physical: 'None',           geo: 'Beam', master: 'Grand', default0: true },
+  DIM3:         { gdtf: 'Dimmer3',           pretty: 'Dimmer 3',         feature: 'Dimmer.Dimmer',      physical: 'None',           geo: 'Beam', master: 'Grand', default0: true },
+  // Strobe sub-attributes
+  STROBEDURATION:  { gdtf: 'ShutterStrobePulse',     pretty: 'Strobe Pulse',      feature: 'Shutter.Shutter', physical: 'None', geo: 'Beam' },
+  STROBEMODE:      { gdtf: 'ShutterStrobeMode',      pretty: 'Strobe Mode',       feature: 'Shutter.Shutter', physical: 'None', geo: 'Beam' },
+  STROBEDURATION2: { gdtf: 'ShutterStrobePulse2',    pretty: 'Strobe Pulse 2',    feature: 'Shutter.Shutter', physical: 'None', geo: 'Beam' },
+  STROBEMODE2:     { gdtf: 'ShutterStrobeMode2',     pretty: 'Strobe Mode 2',     feature: 'Shutter.Shutter', physical: 'None', geo: 'Beam' },
+  // Global color channels (JDC-1 all-pixel color)
+  REDALL:       { gdtf: 'ColorAdd_R',        pretty: 'Red All',          feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  GREENALL:     { gdtf: 'ColorAdd_G',        pretty: 'Green All',        feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  BLUEALL:      { gdtf: 'ColorAdd_B',        pretty: 'Blue All',         feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  // Color presets/cross-fade
+  COLORCROSSFADE: { gdtf: 'ColorMixMode',    pretty: 'Color Cross Fade', feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  COLORCOLOR:   { gdtf: 'ColorPreset1',      pretty: 'Color Preset 1',   feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  COLORCOLOR2:  { gdtf: 'ColorPreset2',      pretty: 'Color Preset 2',   feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  COLORCOLOR3:  { gdtf: 'ColorPreset3',      pretty: 'Color Preset 3',   feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  COLORCOLOR4:  { gdtf: 'ColorPreset4',      pretty: 'Color Preset 4',   feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  // Pixel mask / effect macros (X4 Bar)
+  COLORMIXMSPEED: { gdtf: 'ColorMixMSpeed',  pretty: 'Color Mix Speed',  feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  PIXELMASK:    { gdtf: 'Effects1',           pretty: 'Pixel Mask',       feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
+  PIXELMASK2:   { gdtf: 'Effects2',           pretty: 'Pixel Mask 2',     feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
+  PIXELMASKEFFECTTIME:  { gdtf: 'Effects1Rate', pretty: 'Pixel Mask Speed', feature: 'Effect.Effect',    physical: 'None',           geo: 'Beam' },
+  PIXELMASKEFFECTTIME2: { gdtf: 'Effects2Rate', pretty: 'Pixel Mask Speed 2', feature: 'Effect.Effect',  physical: 'None',           geo: 'Beam' },
+  INTENSITYMACROS:  { gdtf: 'IntensityMacro1', pretty: 'Intensity Macro',   feature: 'Effect.Effect',   physical: 'None',           geo: 'Beam' },
+  INTENSITYMACROS2: { gdtf: 'IntensityMacro2', pretty: 'Intensity Macro 2', feature: 'Effect.Effect',   physical: 'None',           geo: 'Beam' },
 };
 
 function lookupAttr(ma3Name) {
