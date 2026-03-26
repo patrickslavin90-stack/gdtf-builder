@@ -44,7 +44,7 @@ CRITICAL NESTING STRUCTURE — follow this EXACTLY or MA3 rejects the file:
         <DMXChannels>
           <DMXChannel Offset="1" Geometry="Beam" InitialFunction="Beam_Dimmer.Dimmer.Dimmer 1">
             <LogicalChannel Attribute="Dimmer" Master="Grand">
-              <ChannelFunction Name="Dimmer 1" Attribute="Dimmer" DMXFrom="0/1" Default="255/1" CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000">
+              <ChannelFunction Name="Dimmer 1" Attribute="Dimmer" DMXFrom="0/1" Default="0/1" CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000">
                 <ChannelSet Name="Closed" DMXFrom="0/1" DMXTo="0/1"/>
                 <ChannelSet Name="Open" DMXFrom="1/1" DMXTo="255/1"/>
               </ChannelFunction>
@@ -80,6 +80,7 @@ DMX VALUES:
 13. InitialFunction format: "GeoName_Attr.Attr.CFName" where GeoName matches the DMXChannel Geometry attribute
 14. Every ChannelFunction: Name="CFName" CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000" Default="value/1"
 15. Pan ChannelFunction MUST have PhysicalFrom="-270.000000" PhysicalTo="270.000000" (or fixture-specific range). Tilt MUST have PhysicalFrom="-135.000000" PhysicalTo="135.000000". These are REQUIRED for MA3 3D viewer pan/tilt control
+16. ColorAdd_R, ColorAdd_G, ColorAdd_B, ColorAdd_W channels MUST default to full: Default="255/1". Dimmer defaults to Default="0/1" (off)
 
 ATTRIBUTES:
 16. Use AttributeDefinitions > FeatureGroups + Attributes (NOT bare <Features> or <Attributes> at FixtureType level)
