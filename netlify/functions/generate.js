@@ -440,16 +440,19 @@ function prepareRequest(body) {
   return { prompt, parsedMA3, expectedFootprint, expectedChannels };
 }
 
-async function callGemini(apiKey, prompt) {
+async function callGemini(apiKey, prompt, complex = false) {
+  // Use flash-lite for simple fixtures (cheap+fast), regular flash for complex (reliable)
+  const model = complex ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite';
+  const maxTokens = complex ? 16384 : 8192;
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 8192, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
       }),
     }
   );
@@ -567,9 +570,10 @@ exports.handler = async function(event) {
 
   try {
     const { prompt, parsedMA3, expectedFootprint, expectedChannels } = prepareRequest(body);
+    const isComplex = (expectedChannels || 0) > 15;
 
     // Try synchronous generation first (works for simple fixtures)
-    const rawXml = await callGemini(apiKey, prompt);
+    const rawXml = await callGemini(apiKey, prompt, isComplex);
     if (!rawXml) return { statusCode: 502, headers, body: JSON.stringify({ error: 'Empty Gemini response' }) };
     const xml = postProcess(rawXml, parsedMA3);
 

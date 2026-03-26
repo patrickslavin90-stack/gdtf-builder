@@ -18,8 +18,8 @@ exports.handler = async function(event) {
     const { getStore } = await import('@netlify/blobs');
     const store = getStore('gdtf-jobs');
 
-    const { prompt, parsedMA3 } = prepareRequest(body);
-    const rawXml = await callGemini(apiKey, prompt);
+    const { prompt, parsedMA3, expectedChannels } = prepareRequest(body);
+    const rawXml = await callGemini(apiKey, prompt, (expectedChannels || 0) > 15);
 
     if (!rawXml) {
       await store.setJSON(jobId, { status: 'error', error: 'Empty Gemini response' });
