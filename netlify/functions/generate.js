@@ -347,19 +347,19 @@ function prepareRequest(body) {
   if (instancePrompt) prompt += instancePrompt + '\n';
   prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
 
-  return { prompt, parsedMA3, maxTokens: parsedMA3 ? 16384 : 32768 };
+  return { prompt, parsedMA3 };
 }
 
-async function callGemini(apiKey, prompt, maxTokens) {
+async function callGemini(apiKey, prompt) {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
+        generationConfig: { maxOutputTokens: 8192, temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
       }),
     }
   );
@@ -428,10 +428,10 @@ exports.handler = async function(event) {
   }
 
   try {
-    const { prompt, parsedMA3, maxTokens } = prepareRequest(body);
+    const { prompt, parsedMA3 } = prepareRequest(body);
 
     // Try synchronous generation first (works for simple fixtures)
-    const rawXml = await callGemini(apiKey, prompt, maxTokens);
+    const rawXml = await callGemini(apiKey, prompt);
     if (!rawXml) return { statusCode: 502, headers, body: JSON.stringify({ error: 'Empty Gemini response' }) };
     const xml = postProcess(rawXml, parsedMA3);
     return { statusCode: 200, headers, body: JSON.stringify({ xml }) };
