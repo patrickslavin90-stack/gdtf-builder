@@ -342,15 +342,76 @@ function prepareRequest(body) {
   if (dmxMode)      promptParts.push(`DMX Mode Name: ${dmxMode}`);
   if (fixtureType && fixtureType !== 'auto') promptParts.push(`Fixture Type: ${fixtureType}`);
 
+  // Count expected DMX footprint and DMXChannels from input
+  let expectedFootprint = 0;
+  let expectedChannels = 0;
+  if (parsedMA3) {
+    // From parsed MA3 XML — count total DMX slots across all modules/instances
+    for (let i = 0; i < parsedMA3.modules.length; i++) {
+      const mod = parsedMA3.modules[i];
+      const patches = parsedMA3.grouped[i] || [];
+      let modSlots = 0;
+      let modChannels = 0;
+      for (const ch of mod.channels) {
+        modSlots += ch.fine ? 2 : 1;
+        modChannels++;
+      }
+      if (patches.length <= 1) {
+        expectedFootprint += modSlots;
+        expectedChannels += modChannels;
+      } else {
+        // Pixel module — channels defined once, replicated per instance
+        expectedFootprint += modSlots * patches.length;
+        expectedChannels += modChannels; // only one set in DMXChannels
+      }
+    }
+  } else if (channels) {
+    // From text channel list — count "CH" entries
+    // Count unique channel numbers
+    const nums = new Set();
+    for (const line of channels.split('\n')) {
+      const m = line.match(/CH\s*(\d+)(?:\s*[-,]\s*(\d+))?/i);
+      if (m) {
+        const start = parseInt(m[1]);
+        const end = m[2] ? parseInt(m[2]) : start;
+        for (let n = start; n <= end; n++) nums.add(n);
+      }
+    }
+    expectedFootprint = nums.size;
+    // Count DMXChannels (16-bit pairs = 1 channel)
+    expectedChannels = 0;
+    for (const line of channels.split('\n')) {
+      if (/CH\s*\d+/i.test(line)) {
+        const m = line.match(/CH\s*(\d+)[-,]\s*(\d+)/i);
+        if (m && (parseInt(m[2]) - parseInt(m[1]) === 1) && /16.?bit|fine/i.test(line)) {
+          expectedChannels++; // 16-bit pair = 1 DMXChannel
+        } else if (m && (parseInt(m[2]) - parseInt(m[1]) > 1)) {
+          // Range like CH17-20 = multiple channels
+          expectedChannels += parseInt(m[2]) - parseInt(m[1]) + 1;
+        } else {
+          expectedChannels++;
+        }
+      }
+    }
+  }
+
   let prompt = promptParts.join('\n') + '\n\n';
   if (existingXml) prompt += `EXISTING GDTF XML (repair/upgrade):\n${existingXml.slice(0, 15000)}\n\n`;
   if (channels)    prompt += `DMX CHANNEL LIST:\n${channels}\n\n`;
   if (notes)       prompt += `ADDITIONAL NOTES:\n${notes}\n\n`;
   const instancePrompt = buildInstancePrompt(parsedMA3);
   if (instancePrompt) prompt += instancePrompt + '\n';
+
+  // Tell Gemini the exact expected counts
+  if (expectedFootprint > 0) {
+    prompt += `\nCRITICAL: This fixture uses exactly ${expectedFootprint} DMX slots (addresses). `;
+    prompt += `Generate exactly ${expectedChannels} DMXChannel elements (16-bit pairs count as 1 DMXChannel with Offset="N,N+1"). `;
+    prompt += `Every channel from the input MUST appear in the output. Do NOT skip or merge channels.\n\n`;
+  }
+
   prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
 
-  return { prompt, parsedMA3 };
+  return { prompt, parsedMA3, expectedFootprint, expectedChannels };
 }
 
 async function callGemini(apiKey, prompt) {
@@ -479,13 +540,31 @@ exports.handler = async function(event) {
   }
 
   try {
-    const { prompt, parsedMA3 } = prepareRequest(body);
+    const { prompt, parsedMA3, expectedFootprint, expectedChannels } = prepareRequest(body);
 
     // Try synchronous generation first (works for simple fixtures)
     const rawXml = await callGemini(apiKey, prompt);
     if (!rawXml) return { statusCode: 502, headers, body: JSON.stringify({ error: 'Empty Gemini response' }) };
     const xml = postProcess(rawXml, parsedMA3);
-    return { statusCode: 200, headers, body: JSON.stringify({ xml }) };
+
+    // Validate channel count
+    const actualChannels = (xml.match(/<DMXChannel[\s>]/g) || []).length;
+    const warnings = [];
+    if (expectedChannels && actualChannels !== expectedChannels) {
+      warnings.push(`Expected ${expectedChannels} DMXChannels but generated ${actualChannels}`);
+    }
+    if (expectedFootprint) {
+      const offsets = [...xml.matchAll(/Offset="([^"]+)"/g)].map(m => m[1]);
+      let actualSlots = 0;
+      for (const o of offsets) actualSlots += o.includes(',') ? o.split(',').length : 1;
+      if (actualSlots !== expectedFootprint) {
+        warnings.push(`Expected ${expectedFootprint} DMX slots but generated ${actualSlots}`);
+      }
+    }
+
+    const result = { xml };
+    if (warnings.length) result.warnings = warnings;
+    return { statusCode: 200, headers, body: JSON.stringify(result) };
 
   } catch (err) {
     // If it looks like a timeout or complex fixture, try background generation

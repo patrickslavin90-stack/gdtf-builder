@@ -875,6 +875,11 @@ async function generate() {
     generatedName = fixtureName || 'fixture';
     showOutput(generatedXML, manufacturer);
 
+    // Show channel count warnings if any
+    if (data.warnings && data.warnings.length) {
+      setStatus('warn', '⚠ ' + data.warnings.join(' | '));
+    }
+
   } catch(err) {
     setStatus('err', err.message);
   } finally {
