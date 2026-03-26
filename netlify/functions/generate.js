@@ -80,7 +80,10 @@ DMX VALUES:
 13. InitialFunction format: "GeoName_Attr.Attr.CFName" where GeoName matches the DMXChannel Geometry attribute
 14. Every ChannelFunction: Name="CFName" CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000" Default="value/1"
 15. Pan ChannelFunction MUST have PhysicalFrom="-270.000000" PhysicalTo="270.000000" (or fixture-specific range). Tilt MUST have PhysicalFrom="-135.000000" PhysicalTo="135.000000". These are REQUIRED for MA3 3D viewer pan/tilt control
-16. ColorAdd_R, ColorAdd_G, ColorAdd_B, ColorAdd_W channels MUST default to full: Default="255/1". Dimmer defaults to Default="0/1" (off)
+16. Zoom ChannelFunction MUST have PhysicalFrom and PhysicalTo set to the beam angle range in degrees (e.g. PhysicalFrom="7.000000" PhysicalTo="55.000000"). REQUIRED for MA3 3D zoom control
+17. Iris ChannelFunction MUST have PhysicalFrom="0.000000" PhysicalTo="1.000000"
+18. ColorAdd_R, ColorAdd_G, ColorAdd_B, ColorAdd_W channels MUST default to full: Default="255/1". Dimmer defaults to Default="0/1" (off)
+19. Use standard GDTF Feature names: Position.Pan, Position.Tilt, Beam.Zoom, Beam.Focus, Beam.Iris, Beam.Frost, Gobo.Gobo, Color.Color, Color.RGB — NOT "Movement", "Beam Shaping", etc
 
 ATTRIBUTES:
 16. Use AttributeDefinitions > FeatureGroups + Attributes (NOT bare <Features> or <Attributes> at FixtureType level)
@@ -389,7 +392,19 @@ function postProcess(xml, parsedMA3) {
   xml = fixGUID(xml);
   xml = fixMasterAttribute(xml);
   xml = fix16bitResolution(xml);
+  xml = fixZoomPhysical(xml);
   return xml;
+}
+
+// Ensure Zoom ChannelFunction has PhysicalFrom/PhysicalTo for 3D beam control
+function fixZoomPhysical(xml) {
+  return xml.replace(
+    /(<ChannelFunction[^>]*Attribute="Zoom"[^>]*)(>)/g,
+    (m, pre, close) => {
+      if (pre.includes('PhysicalFrom')) return m; // already has it
+      return `${pre} PhysicalFrom="7.000000" PhysicalTo="55.000000"${close}`;
+    }
+  );
 }
 
 // Fix all-zeros or invalid GUIDs
