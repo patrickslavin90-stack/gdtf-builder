@@ -252,6 +252,102 @@ function translateMA3Attr(attr) {
   return info ? `${info.gdtf} (${info.pretty})` : attr;
 }
 
+// ── Derive a short mode prefix from a mode name ──
+function modePrefix(modeName) {
+  const lower = modeName.toLowerCase();
+  if (lower === 'standard') return 'Std';
+  if (lower === 'basic') return 'Basic';
+  if (lower === 'compact') return 'Comp';
+  if (lower.includes('high') && lower.includes('res')) return 'Hires';
+  // Default: capitalize first word, max 6 chars
+  const words = modeName.split(/[\s_-]+/);
+  if (words[0].length <= 6) return words[0].charAt(0).toUpperCase() + words[0].slice(1);
+  return words[0].slice(0, 6).charAt(0).toUpperCase() + words[0].slice(1, 6);
+}
+
+// ── Build one geometry tree for a mode ──
+function buildGeoTree(prefix, pixelModules, beamType) {
+  const POS_IDENTITY = '{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,0.000000}{0,0,0,1}';
+  const POS_YOKE = '{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.265000}{0,0,0,1}';
+  const POS_HEAD = '{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.100000}{0,0,0,1}';
+  const POS_BEAM = '{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.150000}{0,0,0,1}';
+
+  let xml = '';
+  xml += `      <Geometry Name="${prefix} Base" Model="Base" Position="${POS_IDENTITY}">\n`;
+  xml += `        <Axis Name="${prefix} Yoke" Model="Yoke" Position="${POS_YOKE}">\n`;
+  xml += `          <Axis Name="${prefix} Head" Model="Head" Position="${POS_HEAD}">\n`;
+
+  // Add GeometryReferences for pixel modules (only for primary/pixel modes)
+  if (pixelModules && pixelModules.length > 0) {
+    for (const pm of pixelModules) {
+      for (let j = 0; j < pm.patches.length; j++) {
+        xml += `            <GeometryReference Geometry="PixelBeam" Model="BeamModel" Name="${prefix} ${pm.name} ${j + 1}" Position="${POS_BEAM}">\n`;
+        xml += `              <Break DMXBreak="1" DMXOffset="${pm.patches[j]}"/>\n`;
+        xml += `            </GeometryReference>\n`;
+      }
+    }
+  }
+
+  xml += `            <Beam Name="${prefix} Beam" Model="BeamModel" LampType="LED" BeamType="${beamType}" BeamAngle="1.000000" BeamRadius="0.025000" FieldAngle="25.000000" RectangleRatio="1.777700" ThrowRatio="1.000000" Position="${POS_BEAM}"/>\n`;
+  xml += `          </Axis>\n`;
+  xml += `        </Axis>\n`;
+  xml += `      </Geometry>\n`;
+  return xml;
+}
+
+// ── Build DMXChannel XML for a single channel ──
+function buildDMXChannelXml(ch, geoName, resolution, offsetStr) {
+  const defVal = ch.default0 ? '0' : (ch.default255 ? '255' : '0');
+  const master = ch.master || 'None';
+  let physAttrs = '';
+  if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
+
+  return `          <DMXChannel DMXBreak="1" Offset="${offsetStr}" Geometry="${geoName}" InitialFunction="${geoName}_${ch.gdtf}.${ch.gdtf}.${ch.pretty} 1">
+            <LogicalChannel Attribute="${ch.gdtf}" Master="${master}">
+              <ChannelFunction Name="${ch.pretty} 1" Attribute="${ch.gdtf}" DMXFrom="0/${resolution}" Default="${defVal}/${resolution}"${physAttrs} CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000"/>
+            </LogicalChannel>
+          </DMXChannel>\n`;
+}
+
+// ── Map a geometry name (Yoke, Head, Beam) to a mode-prefixed geometry name ──
+function prefixGeo(prefix, geoName) {
+  // PixelBeam stays as-is (shared template)
+  if (geoName === 'PixelBeam') return 'PixelBeam';
+  return `${prefix} ${geoName}`;
+}
+
+// ── Build one DMXMode XML block ──
+function buildModeXml(modeName, prefix, channels, hasPixels) {
+  let xml = `      <DMXMode Name="${modeName}" Geometry="${prefix} Base" Description="">\n`;
+  xml += `        <DMXChannels>\n`;
+
+  // Main (non-pixel) channels first
+  for (const ch of channels) {
+    if (ch.isPixel) continue;
+    const res = ch.fine ? '2' : '1';
+    const offset = ch.fine ? `${ch.coarse},${ch.fine}` : `${ch.coarse}`;
+    const geoName = prefixGeo(prefix, ch.geo);
+    xml += buildDMXChannelXml(ch, geoName, res, offset);
+  }
+
+  // Pixel template channels (defined once, replicated by GeometryReference)
+  const pixelChannels = channels.filter(c => c.isPixel);
+  if (pixelChannels.length > 0) {
+    let pixelOffset = 1;
+    for (const ch of pixelChannels) {
+      const res = ch.fine ? '2' : '1';
+      const offset = ch.fine ? `${pixelOffset},${pixelOffset + 1}` : `${pixelOffset}`;
+      xml += buildDMXChannelXml(ch, 'PixelBeam', res, offset);
+      pixelOffset += ch.fine ? 2 : 1;
+    }
+  }
+
+  xml += `        </DMXChannels>\n`;
+  xml += `        <Relations/><FTMacros/>\n`;
+  xml += `      </DMXMode>\n`;
+  return xml;
+}
+
 // ── Deterministic GDTF builder from parsed MA3 data (no Gemini needed) ──
 function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmxMode, fixtureType }) {
   const crypto = require('crypto');
@@ -260,11 +356,12 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
   const name = fixtureName || 'Fixture';
   const short = shortName || name.slice(0, 10);
   const mode = dmxMode || 'Standard';
+  const beamType = fixtureType === 'wash' ? 'Wash' : 'Spot';
 
   // Collect all unique attributes and features
   const attrs = new Map(); // gdtf name → attr info
   const features = new Map(); // featureGroup.feature → true
-  const allChannels = []; // { attr info, coarse, fine, moduleIndex }
+  const allChannels = []; // { attr info, coarse, fine, moduleIndex, isPixel }
 
   for (let i = 0; i < parsed.modules.length; i++) {
     const mod = parsed.modules[i];
@@ -272,7 +369,6 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
     const isPixel = patches.length > 1;
     for (const ch of mod.channels) {
       const info = lookupAttr(ch.attribute);
-      // For pixel modules, override geo to 'Beam' (the template geometry)
       const geo = isPixel ? 'Beam' : info.geo;
       const entry = { ...info, geo, coarse: ch.coarse, fine: ch.fine, moduleIndex: i, isPixel };
       allChannels.push(entry);
@@ -281,14 +377,63 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
     }
   }
 
+  // Detect pixel modules
+  const pixelModules = [];
+  for (let i = 0; i < parsed.modules.length; i++) {
+    const patches = parsed.grouped[i] || [];
+    if (patches.length > 1) pixelModules.push({ moduleIndex: i, patches, name: parsed.modules[i].name });
+  }
+  const hasPixels = pixelModules.length > 0;
+
+  // Check for 16-bit channels (only relevant for non-pixel fixtures)
+  const has16bit = !hasPixels && allChannels.some(ch => ch.fine !== null && ch.fine !== undefined);
+
+  // ── Determine modes to generate ──
+  const primaryPrefix = modePrefix(mode);
+  const modes = []; // { modeName, prefix, channels, pixelModules (or null) }
+
+  // Primary mode — always present, all channels, all pixel instances
+  modes.push({
+    modeName: mode,
+    prefix: primaryPrefix,
+    channels: allChannels,
+    pixelModules: hasPixels ? pixelModules : null,
+  });
+
+  if (hasPixels) {
+    // Compact mode — main module channels only, NO pixel modules, no GeometryReferences
+    const compactChannels = allChannels.filter(ch => !ch.isPixel);
+    modes.push({
+      modeName: 'Compact',
+      prefix: 'Comp',
+      channels: compactChannels,
+      pixelModules: null,
+    });
+  } else if (has16bit) {
+    // Basic mode — drop fine channels, 8-bit only
+    const basicChannels = allChannels.map(ch => {
+      if (ch.fine !== null && ch.fine !== undefined) {
+        return { ...ch, fine: null }; // drop fine, becomes 8-bit
+      }
+      return ch;
+    });
+    modes.push({
+      modeName: 'Basic',
+      prefix: 'Basic',
+      channels: basicChannels,
+      pixelModules: null,
+    });
+  }
+
   // Build FeatureGroups
   const featureGroups = new Map();
   for (const feat of features.keys()) {
-    const [group, name] = feat.split('.');
+    const [group, fname] = feat.split('.');
     if (!featureGroups.has(group)) featureGroups.set(group, new Set());
-    featureGroups.get(group).add(name);
+    featureGroups.get(group).add(fname);
   }
 
+  // ── Build XML document ──
   let xml = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <GDTF DataVersion="1.2">
   <FixtureType Name="${name}" LongName="${mfr} ${name}" ShortName="${short}" Manufacturer="${mfr}" Description="" FixtureTypeID="${guid}" CanHaveChildren="Yes" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
@@ -320,86 +465,29 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
       <Model Name="Head" Primitive="Cube" Length="0.250000" Width="0.250000" Height="0.300000" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
       <Model Name="BeamModel" Primitive="Cylinder" Length="0.080000" Width="0.080000" Height="0.010000" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
     </Models>
-    <Geometries>
-      <Geometry Name="Base" Model="Base" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,0.000000}{0,0,0,1}">
-        <Axis Name="Yoke" Model="Yoke" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.265000}{0,0,0,1}">
-          <Axis Name="Head" Model="Head" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.100000}{0,0,0,1}">\n`;
+    <Geometries>\n`;
 
-  // Check for pixel modules — add GeometryReferences
-  const pixelModules = [];
-  for (let i = 0; i < parsed.modules.length; i++) {
-    const patches = parsed.grouped[i] || [];
-    if (patches.length > 1) pixelModules.push({ moduleIndex: i, patches, name: parsed.modules[i].name });
+  // Build geometry trees — one per mode
+  for (const m of modes) {
+    xml += buildGeoTree(m.prefix, m.pixelModules, beamType);
   }
 
-  if (pixelModules.length > 0) {
-    for (const pm of pixelModules) {
-      for (let j = 0; j < pm.patches.length; j++) {
-        xml += `            <GeometryReference Geometry="PixelBeam" Model="BeamModel" Name="${pm.name} ${j + 1}" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.150000}{0,0,0,1}">
-              <Break DMXBreak="1" DMXOffset="${pm.patches[j]}"/>
-            </GeometryReference>\n`;
-      }
-    }
+  // Add shared pixel beam template if any mode uses pixels
+  if (hasPixels) {
+    const POS_IDENTITY = '{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,0.000000}{0,0,0,1}';
+    xml += `      <Beam Name="PixelBeam" Model="BeamModel" LampType="LED" BeamType="Wash" BeamAngle="1.000000" BeamRadius="0.025000" FieldAngle="25.000000" RectangleRatio="1.777700" ThrowRatio="1.000000" Position="${POS_IDENTITY}"/>\n`;
   }
 
-  xml += `            <Beam Name="Beam" Model="BeamModel" LampType="LED" BeamType="${fixtureType === 'wash' ? 'Wash' : 'Spot'}" BeamAngle="1.000000" BeamRadius="0.025000" FieldAngle="25.000000" RectangleRatio="1.777700" ThrowRatio="1.000000" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.150000}{0,0,0,1}"/>
-          </Axis>
-        </Axis>
-      </Geometry>\n`;
+  xml += `    </Geometries>\n`;
 
-  // Add pixel beam template if needed
-  if (pixelModules.length > 0) {
-    xml += `      <Beam Name="PixelBeam" Model="BeamModel" LampType="LED" BeamType="Wash" BeamAngle="1.000000" BeamRadius="0.025000" FieldAngle="25.000000" RectangleRatio="1.777700" ThrowRatio="1.000000" Position="{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,0.000000}{0,0,0,1}"/>\n`;
+  // Build DMXModes — one per mode
+  xml += `    <DMXModes>\n`;
+  for (const m of modes) {
+    xml += buildModeXml(m.modeName, m.prefix, m.channels, m.pixelModules && m.pixelModules.length > 0);
   }
+  xml += `    </DMXModes>\n`;
 
-  xml += `    </Geometries>
-    <DMXModes>
-      <DMXMode Name="${mode}" Geometry="Base" Description="">
-        <DMXChannels>\n`;
-
-  // Build DMXChannels — main module channels first, then pixel template channels
-  for (const ch of allChannels) {
-    if (ch.isPixel) continue; // pixel channels come after main channels
-    const res = ch.fine ? '2' : '1';
-    const offset = ch.fine ? `${ch.coarse},${ch.fine}` : `${ch.coarse}`;
-    const defVal = ch.default0 ? '0' : (ch.default255 ? '255' : '0');
-    const geo = ch.geo;
-    const master = ch.master || 'None';
-    let physAttrs = '';
-    if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
-
-    xml += `          <DMXChannel DMXBreak="1" Offset="${offset}" Geometry="${geo}" InitialFunction="${geo}_${ch.gdtf}.${ch.gdtf}.${ch.pretty} 1">
-            <LogicalChannel Attribute="${ch.gdtf}" Master="${master}">
-              <ChannelFunction Name="${ch.pretty} 1" Attribute="${ch.gdtf}" DMXFrom="0/${res}" Default="${defVal}/${res}"${physAttrs} CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000"/>
-            </LogicalChannel>
-          </DMXChannel>\n`;
-  }
-
-  // Pixel template channels (defined once, replicated by GeometryReference)
-  const pixelChannels = allChannels.filter(c => c.isPixel);
-  if (pixelChannels.length > 0) {
-    // Use relative offsets starting at 1
-    let pixelOffset = 1;
-    for (const ch of pixelChannels) {
-      const res = ch.fine ? '2' : '1';
-      const offset = ch.fine ? `${pixelOffset},${pixelOffset + 1}` : `${pixelOffset}`;
-      const defVal = ch.default0 ? '0' : (ch.default255 ? '255' : '0');
-      let physAttrs = '';
-      if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
-
-      xml += `          <DMXChannel DMXBreak="1" Offset="${offset}" Geometry="PixelBeam" InitialFunction="PixelBeam_${ch.gdtf}.${ch.gdtf}.${ch.pretty} 1">
-            <LogicalChannel Attribute="${ch.gdtf}" Master="${ch.master || 'None'}">
-              <ChannelFunction Name="${ch.pretty} 1" Attribute="${ch.gdtf}" DMXFrom="0/${res}" Default="${defVal}/${res}"${physAttrs} CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000"/>
-            </LogicalChannel>
-          </DMXChannel>\n`;
-      pixelOffset += ch.fine ? 2 : 1;
-    }
-  }
-
-  xml += `        </DMXChannels>
-      </DMXMode>
-    </DMXModes>
-    <Revisions><Revision Date="${new Date().toISOString().split('T')[0]}T00:00:00" ModifiedBy="LMNR GDTF Builder" Text="rev 1" UserID="0"/></Revisions>
+  xml += `    <Revisions><Revision Date="${new Date().toISOString().split('T')[0]}T00:00:00" ModifiedBy="LMNR GDTF Builder" Text="rev 1" UserID="0"/></Revisions>
     <FTPresets/><Protocols/>
   </FixtureType>
 </GDTF>`;
@@ -653,7 +741,7 @@ function prepareRequest(body) {
 
   prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
 
-  return { prompt, parsedMA3, expectedFootprint, expectedChannels };
+  return { prompt, parsedMA3, expectedFootprint, expectedChannels, extractedMeta: { manufacturer, fixtureName, shortName, dmxMode, fixtureType } };
 }
 
 async function callGemini(apiKey, prompt, complex = false) {
@@ -785,13 +873,13 @@ exports.handler = async function(event) {
   }
 
   try {
-    const { prompt, parsedMA3, expectedFootprint, expectedChannels } = prepareRequest(body);
+    const { prompt, parsedMA3, expectedFootprint, expectedChannels, extractedMeta } = prepareRequest(body);
 
     let xml;
 
     // For .xmlp uploads with parsed MA3 data: build GDTF deterministically (no Gemini needed)
     if (parsedMA3 && (body.ma3XmlpBase64 || body.ma3Xml)) {
-      xml = buildGDTFFromParsed(parsedMA3, body);
+      xml = buildGDTFFromParsed(parsedMA3, { ...body, ...extractedMeta });
     } else {
       // Text input — use Gemini
       const isComplex = (expectedChannels || 0) > 15;
@@ -800,16 +888,18 @@ exports.handler = async function(event) {
       xml = postProcess(rawXml, parsedMA3);
     }
 
-    // Validate channel count
-    const actualChannels = (xml.match(/<DMXChannel[\s>]/g) || []).length;
+    // Validate channel count — count only channels in the first DMXMode (primary mode)
     const warnings = [];
+    const firstModeMatch = xml.match(/<DMXMode[^>]*>([\s\S]*?)<\/DMXMode>/);
+    const firstModeBody = firstModeMatch ? firstModeMatch[1] : xml;
+    const actualChannels = (firstModeBody.match(/<DMXChannel[\s>]/g) || []).length;
     if (expectedChannels && actualChannels !== expectedChannels) {
       warnings.push(`Expected ${expectedChannels} DMXChannels but generated ${actualChannels}`);
     }
     // Skip slot count check for multi-instance fixtures (pixel channels use relative offsets)
     const hasGeoRef = xml.includes('<GeometryReference');
     if (expectedFootprint && !hasGeoRef) {
-      const offsets = [...xml.matchAll(/Offset="([^"]+)"/g)].map(m => m[1]);
+      const offsets = [...firstModeBody.matchAll(/Offset="([^"]+)"/g)].map(m => m[1]);
       let actualSlots = 0;
       for (const o of offsets) actualSlots += o.includes(',') ? o.split(',').length : 1;
       if (actualSlots !== expectedFootprint) {
