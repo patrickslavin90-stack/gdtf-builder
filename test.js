@@ -152,8 +152,39 @@ async function run() {
   const gdtfPath = path.join(outDir, `${safeName}.gdtf`);
 
   try {
-    // Use Node's zlib to create a minimal ZIP containing description.xml
-    const zipBuffer = createMinimalZip('description.xml', Buffer.from(xml, 'utf8'));
+    // Build ZIP with description.xml + 3D model files
+    const modelType = positional[4] || 'spot'; // spot, wash, strobe, bar
+    const modelDir = path.join(__dirname, 'models', modelType);
+    const files = [{ name: 'description.xml', data: Buffer.from(xml, 'utf8') }];
+    if (fs.existsSync(modelDir)) {
+      for (const f of fs.readdirSync(modelDir).filter(f => f.endsWith('.3ds'))) {
+        files.push({ name: `models/3ds/${f}`, data: fs.readFileSync(path.join(modelDir, f)) });
+      }
+      // Apply setModelFiles-like transform: set File + PrimitiveType on Model elements
+      let fixedXml = xml;
+      const geoTree = xml.match(/<Geometries>[\s\S]*?<\/Geometries>/);
+      if (geoTree) {
+        const topModel = (geoTree[0].match(/<Geometry\s[^>]*Model="([^"]+)"/) || [])[1];
+        const axModels = [...geoTree[0].matchAll(/<Axis\s[^>]*Model="([^"]+)"/g)].map(m => m[1]);
+        const beamModels = new Set([...geoTree[0].matchAll(/<Beam\s[^>]*Model="([^"]+)"/g)].map(m => m[1]));
+        const fileMap = {};
+        if (topModel) fileMap[topModel] = 'base';
+        if (axModels[0]) fileMap[axModels[0]] = 'yoke';
+        if (axModels[1]) fileMap[axModels[1]] = 'head';
+        fixedXml = xml.replace(/<Model\s([^>]*?)(\s*\/?>)/g, (match, attrs, close) => {
+          const nm = (attrs.match(/Name="([^"]+)"/) || [])[1];
+          if (!nm) return match;
+          let a = attrs.replace(/\s*File="[^"]*"/g, '').replace(/\s*PrimitiveType="[^"]*"/g, '').replace(/\s*Primitive="[^"]*"/g, '');
+          if (beamModels.has(nm) && !fileMap[nm]) a += ' PrimitiveType="Cylinder"';
+          else if (fileMap[nm]) a += ` File="${fileMap[nm]}" PrimitiveType="Undefined"`;
+          else a += ' PrimitiveType="Cube"';
+          return `<Model ${a}${close}`;
+        });
+      }
+      files[0].data = Buffer.from(fixedXml, 'utf8');
+      fs.writeFileSync(xmlPath, fixedXml); // update XML file too
+    }
+    const zipBuffer = createMultiFileZip(files);
     fs.writeFileSync(gdtfPath, zipBuffer);
     console.log(`\n── OUTPUT ──`);
     console.log(`  XML:  ${xmlPath}`);
@@ -168,7 +199,41 @@ async function run() {
   process.exit(allOk ? 0 : 1);
 }
 
-// Minimal ZIP creator using only Node built-ins (STORE, no compression)
+// Multi-file ZIP creator using only Node built-ins (STORE, no compression)
+function createMultiFileZip(files) {
+  const now = new Date();
+  const time = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF;
+  const date = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+  const crcTable = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) { let c = i; for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); crcTable[i] = c; }
+  function crc32(data) { let crc = 0xFFFFFFFF; for (let i = 0; i < data.length; i++) crc = crcTable[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8); return (crc ^ 0xFFFFFFFF) >>> 0; }
+
+  const parts = []; const cdEntries = []; let offset = 0;
+  for (const { name, data } of files) {
+    const fnBuf = Buffer.from(name, 'utf8');
+    const crc = crc32(data);
+    const lfh = Buffer.alloc(30 + fnBuf.length);
+    lfh.writeUInt32LE(0x04034b50, 0); lfh.writeUInt16LE(20, 4); lfh.writeUInt16LE(0, 8);
+    lfh.writeUInt16LE(time, 10); lfh.writeUInt16LE(date, 12); lfh.writeUInt32LE(crc, 14);
+    lfh.writeUInt32LE(data.length, 18); lfh.writeUInt32LE(data.length, 22);
+    lfh.writeUInt16LE(fnBuf.length, 26); fnBuf.copy(lfh, 30);
+    parts.push(lfh, data);
+    const cd = Buffer.alloc(46 + fnBuf.length);
+    cd.writeUInt32LE(0x02014b50, 0); cd.writeUInt16LE(20, 4); cd.writeUInt16LE(20, 6);
+    cd.writeUInt16LE(0, 10); cd.writeUInt16LE(time, 12); cd.writeUInt16LE(date, 14);
+    cd.writeUInt32LE(crc, 16); cd.writeUInt32LE(data.length, 20); cd.writeUInt32LE(data.length, 24);
+    cd.writeUInt16LE(fnBuf.length, 28); cd.writeUInt32LE(offset, 42); fnBuf.copy(cd, 46);
+    cdEntries.push(cd);
+    offset += lfh.length + data.length;
+  }
+  const cdBuf = Buffer.concat(cdEntries);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0); eocd.writeUInt16LE(files.length, 8); eocd.writeUInt16LE(files.length, 10);
+  eocd.writeUInt32LE(cdBuf.length, 12); eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, cdBuf, eocd]);
+}
+
+// Single-file ZIP (kept for backwards compat)
 function createMinimalZip(filename, data) {
   const fnBuf = Buffer.from(filename, 'utf8');
   const now = new Date();

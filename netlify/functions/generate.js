@@ -42,7 +42,7 @@ CRITICAL NESTING STRUCTURE — follow this EXACTLY or MA3 rejects the file:
     <DMXModes>
       <DMXMode Name="ModeName" Geometry="Base" Description="">
         <DMXChannels>
-          <DMXChannel Offset="1" Geometry="Head" InitialFunction="Head_Dimmer.Dimmer.Dimmer 1">
+          <DMXChannel Offset="1" Geometry="Beam" InitialFunction="Beam_Dimmer.Dimmer.Dimmer 1">
             <LogicalChannel Attribute="Dimmer" Master="Grand">
               <ChannelFunction Name="Dimmer 1" Attribute="Dimmer" DMXFrom="0/1" Default="255/1" CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000">
                 <ChannelSet Name="Closed" DMXFrom="0/1" DMXTo="0/1"/>
@@ -89,7 +89,7 @@ ATTRIBUTES:
 20. Master="Grand" on Dimmer LogicalChannel
 
 GEOMETRY:
-21. DMXMode Geometry="Base" must reference the TOP-LEVEL geometry Name. For moving heads, geometry tree MUST be: Body (Model="Base") > Yoke (Axis, Model="Yoke") > Head (Axis, Model="Head") > Beam. Pan channels reference "Yoke", Tilt channels reference "Head", beam attributes reference "Head" or "Beam"
+21. DMXMode Geometry="Base" must reference the TOP-LEVEL geometry Name. For moving heads, geometry tree MUST be: Base (Model="Base") > Yoke (Axis, Model="Yoke") > Head (Axis, Model="Head") > Beam. Pan channels reference "Yoke", Tilt channels reference "Head". Dimmer, Shutter, Strobe, Color, Gobo, Zoom, Focus, Prism and ALL other beam-output attributes MUST reference "Beam" geometry — this is REQUIRED for MA3 3D viewer to emit light
 22. All Beam elements: RectangleRatio="1.777700" ThrowRatio="1.000000"
 23. All Model elements need all 6 SVG offset attributes set to "0.000000"
 
