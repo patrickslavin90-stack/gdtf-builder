@@ -911,56 +911,74 @@ const MODEL_FILES = {
 function setModelFiles(xml, modelType) {
   if (!modelType || modelType === 'none') return xml;
 
-  // Collect all Model names and map them to .3ds files based on their role in the geometry tree
-  // Determine which model is used where by checking the geometry tree
   const geoTree = xml.match(/<Geometries>[\s\S]*?<\/Geometries>/);
   if (!geoTree) return xml;
 
-  // Find which model names are used at each level: base (top geometry), yoke (first axis), head (inner axis/beam parent)
+  // Find which model names are used at each level in the geometry tree
   const topGeoModel = (geoTree[0].match(/<Geometry\s[^>]*Model="([^"]+)"/) || [])[1];
   const axes = [...geoTree[0].matchAll(/<Axis\s[^>]*Model="([^"]+)"/g)].map(m => m[1]);
   const beamModels = [...geoTree[0].matchAll(/<Beam\s[^>]*Model="([^"]+)"/g)].map(m => m[1]);
 
   // Build model→file mapping based on geometry position
   const modelFileMap = {};
-  if (topGeoModel) modelFileMap[topGeoModel] = 'base';
-  if (axes.length >= 2) {
-    modelFileMap[axes[0]] = 'yoke';
-    modelFileMap[axes[1]] = 'head';
-  } else if (axes.length === 1) {
-    // Single axis — use as yoke if bar/strobe, head if spot/wash
-    modelFileMap[axes[0]] = (modelType === 'bar' || modelType === 'strobe') ? 'yoke' : 'yoke';
-  }
-  // Beam models use head
-  for (const bm of beamModels) {
-    if (!modelFileMap[bm]) modelFileMap[bm] = 'head';
+  const beamModelSet = new Set(beamModels);
+
+  if (modelType === 'bar') {
+    // Bar: no base model, yoke + head only
+    if (topGeoModel) modelFileMap[topGeoModel] = 'yoke';
+    if (axes.length >= 1) modelFileMap[axes[0]] = 'head';
+  } else {
+    // Spot/Wash/Strobe: base + yoke + head
+    if (topGeoModel) modelFileMap[topGeoModel] = 'base';
+    if (axes.length >= 2) {
+      modelFileMap[axes[0]] = 'yoke';
+      modelFileMap[axes[1]] = 'head';
+    } else if (axes.length === 1) {
+      modelFileMap[axes[0]] = 'head';
+    }
   }
 
-  // For bar type without separate base, map base to yoke
-  if (modelType === 'bar' && topGeoModel) modelFileMap[topGeoModel] = 'yoke';
-
-  // Apply File and PrimitiveType to all Model elements
+  // Apply File and PrimitiveType to Model elements
+  // Beam models get NO File — they should be invisible (just the light output point)
   xml = xml.replace(/<Model\s([^>]*?)(\s*\/?>)/g, (match, attrs, close) => {
     const nameMatch = attrs.match(/Name="([^"]+)"/);
     if (!nameMatch) return match;
-    const file = modelFileMap[nameMatch[1]] || 'head';
+    const name = nameMatch[1];
     let newAttrs = attrs
       .replace(/\s*File="[^"]*"/g, '')
       .replace(/\s*PrimitiveType="[^"]*"/g, '')
       .replace(/\s*Primitive="[^"]*"/g, '');
-    newAttrs += ` File="${file}" PrimitiveType="Undefined"`;
+    if (beamModelSet.has(name) && !modelFileMap[name]) {
+      // Beam model — use a tiny Cube primitive, no .3ds file
+      newAttrs += ' PrimitiveType="Cube"';
+    } else {
+      const file = modelFileMap[name] || 'head';
+      newAttrs += ` File="${file}" PrimitiveType="Undefined"`;
+    }
     return `<Model ${newAttrs}${close}`;
   });
 
-  // Ensure a Yoke model+axis exists for spot/wash (needed for 3D model to render)
+  // For spot/wash: ensure proper Yoke axis exists for pan/tilt 3D control
   if ((modelType === 'spot' || modelType === 'wash') && axes.length < 2) {
-    // Add a Yoke model if missing
-    if (!Object.values(modelFileMap).includes('yoke')) {
-      xml = xml.replace('</Models>', '      <Model Name="Yoke" Length="0.15" Width="0.15" Height="0.1" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000" File="yoke" PrimitiveType="Undefined"/>\n    </Models>');
-      // Wrap the first Axis inside a Yoke axis
-      xml = xml.replace(/(<Geometry\s[^>]*>)\s*(<Axis\s)/, '$1\n        <Axis Name="Yoke" Model="Yoke">\n          $2');
-      // Close the Yoke axis before closing the top geometry
-      xml = xml.replace(/(<\/Axis>)\s*(<\/Geometry>)/, '$1\n        </Axis>\n      $2');
+    // Add Yoke model
+    xml = xml.replace('</Models>',
+      '      <Model Name="YokeModel" Length="0.15" Width="0.15" Height="0.1" ' +
+      'SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" ' +
+      'SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000" ' +
+      'File="yoke" PrimitiveType="Undefined"/>\n    </Models>');
+    // Wrap the existing Axis (Tilt) inside a Yoke Axis (Pan)
+    // Find the first Axis and wrap it
+    const firstAxis = geoTree[0].match(/<Axis\s[^>]*Name="([^"]+)"/);
+    if (firstAxis) {
+      xml = xml.replace(
+        /(<Geometry\s[^>]*>)\s*(<Axis\s)/,
+        '$1\n        <Axis Name="Yoke" Model="YokeModel">\n          $2'
+      );
+      // Close Yoke before closing parent Geometry
+      const lastAxisClose = xml.lastIndexOf('</Axis>', xml.indexOf('</Geometries>'));
+      if (lastAxisClose !== -1) {
+        xml = xml.slice(0, lastAxisClose + 7) + '\n        </Axis>' + xml.slice(lastAxisClose + 7);
+      }
     }
   }
 

@@ -25,17 +25,23 @@ CRITICAL NESTING STRUCTURE — follow this EXACTLY or MA3 rejects the file:
       <Connectors/><Properties><OperatingTemperature High="40.000000" Low="0.000000"/><Weight Value="0.000000"/><LegHeight Value="0.000000"/></Properties>
     </PhysicalDescriptions>
     <Models>
-      <Model Name="Body" Primitive="Cube" Length="0.3" Width="0.3" Height="0.2" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
+      <Model Name="Base" Primitive="Cube" Length="0.3" Width="0.3" Height="0.2" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
+      <Model Name="Yoke" Primitive="Cube" Length="0.1" Width="0.3" Height="0.2" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
+      <Model Name="Head" Primitive="Cube" Length="0.2" Width="0.2" Height="0.3" SVGOffsetX="0.000000" SVGOffsetY="0.000000" SVGFrontOffsetX="0.000000" SVGFrontOffsetY="0.000000" SVGSideOffsetX="0.000000" SVGSideOffsetY="0.000000"/>
     </Models>
     <Geometries>
-      <Geometry Name="Base" Model="Body">
-        <Beam Name="Beam" Model="Body" LampType="LED" BeamType="Wash" RectangleRatio="1.777700" ThrowRatio="1.000000"/>
+      <Geometry Name="Body" Model="Base">
+        <Axis Name="Yoke" Model="Yoke">
+          <Axis Name="Head" Model="Head">
+            <Beam Name="Beam" Model="Head" LampType="LED" BeamType="Wash" RectangleRatio="1.777700" ThrowRatio="1.000000"/>
+          </Axis>
+        </Axis>
       </Geometry>
     </Geometries>
     <DMXModes>
-      <DMXMode Name="ModeName" Geometry="Base" Description="">
+      <DMXMode Name="ModeName" Geometry="Body" Description="">
         <DMXChannels>
-          <DMXChannel Offset="1" Geometry="Beam" InitialFunction="Beam_Dimmer.Dimmer.Dimmer 1">
+          <DMXChannel Offset="1" Geometry="Head" InitialFunction="Head_Dimmer.Dimmer.Dimmer 1">
             <LogicalChannel Attribute="Dimmer" Master="Grand">
               <ChannelFunction Name="Dimmer 1" Attribute="Dimmer" DMXFrom="0/1" Default="255/1" CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000">
                 <ChannelSet Name="Closed" DMXFrom="0/1" DMXTo="0/1"/>
@@ -63,7 +69,7 @@ NESTING (most critical — violations = 0 channels in MA3):
 5. Each DMXChannel MUST CONTAIN a LogicalChannel as a child element — NEVER self-closing <DMXChannel/>
 6. Each LogicalChannel MUST CONTAIN ChannelFunction elements DIRECTLY — no <ChannelFunctions> wrapper
 7. Each ChannelFunction MUST CONTAIN ChannelSet elements DIRECTLY — no <ChannelSets> wrapper
-8. DMXMode has Geometry="Base" as an ATTRIBUTE — NOT a <Geometry> child element
+8. DMXMode has Geometry="Body" as an ATTRIBUTE — NOT a <Geometry> child element
 9. There is NO <LogicalChannels> wrapper element — LogicalChannel goes INSIDE DMXChannel
 
 DMX VALUES:
@@ -81,7 +87,7 @@ ATTRIBUTES:
 19. Master="Grand" on Dimmer LogicalChannel
 
 GEOMETRY:
-20. DMXMode Geometry="Base" must reference the TOP-LEVEL geometry Name
+20. DMXMode Geometry="Body" must reference the TOP-LEVEL geometry Name. For moving heads, geometry tree MUST be: Body (Model="Base") > Yoke (Axis, Model="Yoke") > Head (Axis, Model="Head") > Beam. Pan channels reference "Yoke", Tilt channels reference "Head", beam attributes reference "Head" or "Beam"
 21. Pure rotation Axis elements have NO Model attribute
 22. All Beam elements: RectangleRatio="1.777700" ThrowRatio="1.000000"
 23. All Model elements need all 6 SVG offset attributes set to "0.000000"
