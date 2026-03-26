@@ -277,13 +277,29 @@ function buildGeoTree(prefix, pixelModules, beamType) {
   xml += `        <Axis Name="${prefix} Yoke" Model="Yoke" Position="${POS_YOKE}">\n`;
   xml += `          <Axis Name="${prefix} Head" Model="Head" Position="${POS_HEAD}">\n`;
 
-  // Add GeometryReferences for pixel modules (only for primary/pixel modes)
+  // Add GeometryReferences for pixel modules with position offsets
   if (pixelModules && pixelModules.length > 0) {
+    // Count total pixel instances across all modules
+    let totalPixels = 0;
+    for (const pm of pixelModules) totalPixels += pm.patches.length;
+
+    // Calculate X-position offsets to space pixels evenly along the fixture
+    // Bar width ~1m, spread pixels from -halfWidth to +halfWidth
+    const barWidth = totalPixels > 6 ? 0.6 : 0.45; // wider for more pixels
+    const halfWidth = barWidth / 2;
+
+    let pixelIndex = 0;
     for (const pm of pixelModules) {
       for (let j = 0; j < pm.patches.length; j++) {
-        xml += `            <GeometryReference Geometry="PixelBeam" Model="BeamModel" Name="${prefix} ${pm.name} ${j + 1}" Position="${POS_BEAM}">\n`;
+        // Calculate X offset: evenly spaced from -halfWidth to +halfWidth
+        const xOffset = totalPixels > 1
+          ? (-halfWidth + (pixelIndex / (totalPixels - 1)) * barWidth).toFixed(6)
+          : '0.000000';
+        const pixelPos = `{1.000000,0.000000,0.000000,${xOffset}}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.150000}{0,0,0,1}`;
+        xml += `            <GeometryReference Geometry="PixelBeam" Model="BeamModel" Name="${prefix} ${pm.name} ${j + 1}" Position="${pixelPos}">\n`;
         xml += `              <Break DMXBreak="1" DMXOffset="${pm.patches[j]}"/>\n`;
         xml += `            </GeometryReference>\n`;
+        pixelIndex++;
       }
     }
   }
