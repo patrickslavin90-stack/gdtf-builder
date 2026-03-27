@@ -384,6 +384,42 @@ textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
 }
 .btn-dl:disabled { opacity: .3; cursor: not-allowed; }
 
+/* ─── FEEDBACK ─── */
+.feedback-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px; padding: 8px 0;
+}
+.feedback-label {
+  font-family: var(--mono); font-size: 10px;
+  color: var(--muted); letter-spacing: .06em; text-transform: uppercase;
+}
+.feedback-thumb {
+  background: var(--raised); border: 1px solid var(--border2);
+  border-radius: 6px; padding: 6px 10px; font-size: 16px;
+  cursor: pointer; transition: border-color .15s, background .15s, transform .1s;
+}
+.feedback-thumb:hover { border-color: var(--amber); transform: scale(1.1); }
+.feedback-thumb.voted { border-color: var(--amber); background: var(--amber-lo); }
+.feedback-box {
+  display: none; margin-top: 6px;
+}
+.feedback-box.show { display: block; }
+.feedback-box textarea {
+  width: 100%; background: var(--raised); border: 1px solid var(--border2);
+  border-radius: 6px; color: var(--text); font-family: var(--mono);
+  font-size: 11px; padding: 8px 10px; resize: vertical; min-height: 60px;
+  outline: none;
+}
+.feedback-box textarea:focus { border-color: var(--amber); }
+.feedback-send {
+  margin-top: 6px; padding: 7px 16px;
+  background: transparent; border: 1px solid var(--amber);
+  border-radius: 6px; color: var(--amber);
+  font-family: var(--mono); font-size: 10px; letter-spacing: .04em;
+  cursor: pointer; transition: background .15s;
+}
+.feedback-send:hover { background: var(--amber-lo); }
+
 .btn-row { display: flex; gap: 8px; margin-top: 8px; }
 .btn-copy {
   flex: 0 0 auto;
@@ -799,8 +835,15 @@ footer a:hover { color: var(--amber); }
     <button class="btn-dl" id="dl-btn" onclick="downloadGDTF()" disabled>
       ↓ Download .gdtf
     </button>
-    <div class="btn-row">
-      <button class="btn-copy" onclick="copyXML()">Copy XML</button>
+    <!-- Feedback -->
+    <div class="feedback-row" id="feedback-row">
+      <span class="feedback-label">How did we do?</span>
+      <button class="feedback-thumb" id="fb-up" onclick="feedbackVote('up')">&#128077;</button>
+      <button class="feedback-thumb" id="fb-down" onclick="feedbackVote('down')">&#128078;</button>
+    </div>
+    <div class="feedback-box" id="feedback-box">
+      <textarea id="feedback-text" placeholder="Help us improve by providing your feedback" rows="3"></textarea>
+      <button class="feedback-send" onclick="sendFeedback()">Send Feedback</button>
     </div>
   </div>
 
@@ -1533,12 +1576,23 @@ async function downloadGDTF() {
   URL.revokeObjectURL(url);
 }
 
-async function copyXML() {
-  if (!generatedXML) return;
-  await navigator.clipboard.writeText(generatedXML);
-  const btn = document.querySelector('.btn-copy');
-  btn.textContent = 'Copied!';
-  setTimeout(() => btn.textContent = 'Copy XML', 1500);
+// ── Feedback
+let _feedbackVote = null;
+function feedbackVote(vote) {
+  _feedbackVote = vote;
+  document.getElementById('fb-up').classList.toggle('voted', vote === 'up');
+  document.getElementById('fb-down').classList.toggle('voted', vote === 'down');
+  document.getElementById('feedback-box').classList.add('show');
+}
+function sendFeedback() {
+  const text = document.getElementById('feedback-text').value.trim();
+  const fixName = document.getElementById('fixture-name').value.trim();
+  // Send to mailto as a simple fallback (could be upgraded to API later)
+  const subject = encodeURIComponent('GDTF Builder Feedback: ' + (_feedbackVote === 'up' ? 'Positive' : 'Needs improvement'));
+  const body = encodeURIComponent('Fixture: ' + fixName + '\nVote: ' + _feedbackVote + '\n\n' + (text || '(no comment)'));
+  window.open('mailto:Pat@lmnr.productions?subject=' + subject + '&body=' + body, '_self');
+  // Visual confirmation
+  document.getElementById('feedback-box').innerHTML = '<div style="font-family:var(--mono);font-size:10px;color:var(--green);padding:8px 0">Thanks for your feedback!</div>';
 }
 </script>
 </body>
