@@ -932,21 +932,40 @@ function handleFile(file) {
             const ma3Name = xml.match(/FixtureType\s+name="([^"]+)"/);
             const ma3Mode = xml.match(/FixtureType[^>]+mode="([^"]+)"/);
             const ma3Mfr = xml.match(/<manufacturer>([^<]+)<\/manufacturer>/);
-            if (ma3Name && !document.getElementById('fixture-name').value.trim())
-              document.getElementById('fixture-name').value = ma3Name[1];
-            if (ma3Mfr && !document.getElementById('manufacturer').value.trim())
-              document.getElementById('manufacturer').value = ma3Mfr[1];
-            if (ma3Mode && !document.getElementById('dmx-mode').value.trim())
+            // Always overwrite fields on new upload
+            if (ma3Name) document.getElementById('fixture-name').value = ma3Name[1];
+            if (ma3Mfr) document.getElementById('manufacturer').value = ma3Mfr[1];
+            // Mode name: use detected or default to channel count
+            if (ma3Mode) {
               document.getElementById('dmx-mode').value = ma3Mode[1];
-            // Auto-detect fixture type via picker
+            } else {
+              const chCount = (xml.match(/<ChannelType\s/g) || []).length;
+              if (chCount) document.getElementById('dmx-mode').value = chCount + 'CH';
+            }
+            // Auto-detect fixture type — check module classes and fixture name
             const classes = (xml.match(/class="([^"]+)"/g) || []).map(m => m.replace(/class="|"/g,'').toLowerCase());
-            const instanceCount = (xml.match(/<Instance\s/g) || []).length;
+            const fixName = (ma3Name?.[1] || '').toLowerCase();
+            const moduleCount = (xml.match(/<Module\s/g) || []).length;
+            const hasMultipleModules = moduleCount > 1;
             let detectedType = 'spot';
-            if (classes.some(c => c.includes('headmover'))) {
-              if (instanceCount > 6) detectedType = 'bar';
+            // Check fixture name first for strong hints
+            if (/\bbar\b|batten/i.test(fixName)) {
+              detectedType = 'bar';
+            } else if (/strobe|blinder|jdc|atomic/i.test(fixName)) {
+              detectedType = 'strobe';
+            } else if (/wash|aura|ledwash/i.test(fixName)) {
+              detectedType = 'wash';
+            } else if (/par\b/i.test(fixName)) {
+              detectedType = 'par';
+            } else if (classes.some(c => c.includes('headmover'))) {
+              // Headmover with many pixel modules = likely a bar or strobe, check further
+              if (hasMultipleModules && /strobe|blinder/i.test(xml)) detectedType = 'strobe';
+              else if (hasMultipleModules && fixName.includes('bar')) detectedType = 'bar';
               else if (xml.toLowerCase().includes('wash')) detectedType = 'wash';
               else detectedType = 'spot';
-            } else if (classes.some(c => c.includes('strobe') || c.includes('blinder'))) detectedType = 'strobe';
+            } else if (classes.some(c => c.includes('strobe') || c.includes('blinder'))) {
+              detectedType = 'strobe';
+            }
             pickerSetByValue(detectedType);
           }).catch(() => {}); // auto-fill is best-effort
         }
