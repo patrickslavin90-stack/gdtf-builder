@@ -7,7 +7,7 @@ End with: </GDTF>
 CRITICAL NESTING STRUCTURE — follow this EXACTLY or MA3 rejects the file:
 
 <GDTF DataVersion="1.2">
-  <FixtureType Name="X" LongName="X" ShortName="X" Manufacturer="X" Description="" FixtureTypeID="GUID" CanHaveChildren="Yes" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
+  <FixtureType Name="X" LongName="X" ShortName="X" Manufacturer="X" Description="Built by GDTF-BUILD.COM" FixtureTypeID="GUID" CanHaveChildren="Yes" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
     <AttributeDefinitions>
       <FeatureGroups>
         <FeatureGroup Name="Dimmer"><Feature Name="Dimmer"/></FeatureGroup>
@@ -452,7 +452,7 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
   // ── Build XML document ──
   let xml = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <GDTF DataVersion="1.2">
-  <FixtureType Name="${name}" LongName="${mfr} ${name}" ShortName="${short}" Manufacturer="${mfr}" Description="" FixtureTypeID="${guid}" CanHaveChildren="Yes" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
+  <FixtureType Name="${name}" LongName="${mfr} ${name}" ShortName="${short}" Manufacturer="${mfr}" Description="Built by GDTF-BUILD.COM" FixtureTypeID="${guid}" CanHaveChildren="Yes" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
     <AttributeDefinitions>
       <FeatureGroups>
 `;

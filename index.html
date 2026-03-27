@@ -415,6 +415,50 @@ footer {
 footer a { color: var(--muted); text-decoration: none; }
 footer a:hover { color: var(--amber); }
 
+/* ─── HELP ─── */
+.help-btn {
+  margin-left: auto;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border2);
+  background: var(--raised);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .15s, color .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.help-btn:hover { border-color: var(--amber); color: var(--amber); }
+.help-modal {
+  display: none;
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,.7);
+  align-items: center; justify-content: center;
+  padding: 20px;
+}
+.help-modal.show { display: flex; }
+.help-inner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 480px;
+  width: 100%;
+  position: relative;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.help-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none;
+  color: var(--muted); font-size: 16px;
+  cursor: pointer;
+  font-family: var(--mono);
+}
+.help-close:hover { color: var(--text); }
+
 /* ─── RESPONSIVE ─── */
 @media (max-width: 480px) {
   .row { grid-template-columns: 1fr; }
@@ -430,8 +474,34 @@ footer a:hover { color: var(--amber); }
     <span class="logo">LMNR</span>
     <span class="logo-sep">/</span>
     <span class="logo-name">GDTF Builder</span>
-    <span class="logo-sub">v2</span>
+    <button class="help-btn" onclick="document.getElementById('help-modal').classList.toggle('show')" title="Help">?</button>
   </header>
+
+  <!-- ─ HELP MODAL ─ -->
+  <div class="help-modal" id="help-modal">
+    <div class="help-inner">
+      <button class="help-close" onclick="document.getElementById('help-modal').classList.remove('show')">x</button>
+      <h3 style="color:var(--amber);margin-bottom:12px;font-size:15px">How to use GDTF Builder</h3>
+      <ol style="padding-left:18px;line-height:2;font-size:12px;color:var(--text)">
+        <li>Upload an <strong>MA3 patch file</strong> (.xmlp) or type a channel list manually</li>
+        <li>Select your <strong>fixture type</strong> (Moving Head / Static)</li>
+        <li>Click <strong>Generate GDTF</strong> and download the file</li>
+        <li>Copy the <code>.gdtf</code> file to your fixture library:
+          <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin:4px 0 4px 8px;line-height:1.8">
+            <strong>USB:</strong> USB stick root > fixture types folder<br>
+            <strong>PC:</strong> C:\ProgramData\MALightingTechnology\gma3_library\fixturetypes
+          </div>
+        </li>
+        <li>In MA3, go to <strong>Patch > Fixture Types</strong> and refresh the library</li>
+        <li>Your fixture should appear — patch and go!</li>
+      </ol>
+      <div style="margin-top:14px;padding:10px;background:var(--raised);border-radius:6px;border:1px solid var(--border)">
+        <p style="font-size:10px;color:var(--muted);line-height:1.7;margin:0">
+          <strong style="color:var(--amber)">Disclaimer:</strong> While this tool has been rigorously tested, mistakes can happen. Attributes can be reviewed and edited by uploading your output to <a href="https://gdtf-share.com" target="_blank" style="color:var(--amber)">GDTF-Share.com</a>. Always verify critical fixtures before a live show.
+        </p>
+      </div>
+    </div>
+  </div>
 
   <!-- ─ MAIN CARD ─ -->
   <div class="card">
@@ -736,8 +806,8 @@ footer a:hover { color: var(--amber); }
 
   <!-- ─ FOOTER ─ -->
   <footer>
-    <span>LMNR GDTF Builder · <a href="https://gdtf-share.com" target="_blank">GDTF Share ↗</a></span>
-    <span>Powered by Gemini 1.5 Flash</span>
+    <span>Created by <a href="https://lmnr.productions/" target="_blank">LMNR.PRODUCTIONS</a> · <a href="https://gdtf-share.com" target="_blank">GDTF Share ↗</a></span>
+    <a href="mailto:Pat@lmnr.productions">Contact ↗</a>
   </footer>
 
 </div><!-- .wrap -->
