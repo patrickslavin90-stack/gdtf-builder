@@ -231,6 +231,18 @@ const ATTR_DB = {
   COLORCOLOR2:  { gdtf: 'ColorPreset2',      pretty: 'Color Preset 2',   feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
   COLORCOLOR3:  { gdtf: 'ColorPreset3',      pretty: 'Color Preset 3',   feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
   COLORCOLOR4:  { gdtf: 'ColorPreset4',      pretty: 'Color Preset 4',   feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
+  // Additional color channels (numbered variants for multi-head/pixel fixtures)
+  COLORRGB13:   { gdtf: 'ColorAdd_R2',       pretty: 'Red 2',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB23:   { gdtf: 'ColorAdd_G2',       pretty: 'Green 2',          feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB33:   { gdtf: 'ColorAdd_B2',       pretty: 'Blue 2',           feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB53:   { gdtf: 'ColorAdd_W2',       pretty: 'White 2',          feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  // Effect macro sub-attributes
+  EFFECTMACRORATE: { gdtf: 'EffectMacroRate', pretty: 'Effect Macro Rate', feature: 'Effect.Effect',     physical: 'None',           geo: 'Beam' },
+  EFFECTMACROTIME: { gdtf: 'EffectMacroFade', pretty: 'Effect Macro Fade', feature: 'Effect.Effect',     physical: 'None',           geo: 'Beam' },
+  EFFECTMACROS2: { gdtf: 'EffectMacros2',    pretty: 'Effect Macros 2',  feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
+  // Mode / control channels
+  MODE3:        { gdtf: 'Control2',           pretty: 'Mode Select',      feature: 'Control.Control',    physical: 'None',           geo: 'Beam' },
+  COLORMIXMACROSELECT: { gdtf: 'ColorMixer1', pretty: 'Color Mix Macro', feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
   // Pixel mask / effect macros (X4 Bar)
   COLORMIXMSPEED: { gdtf: 'ColorMixMSpeed',  pretty: 'Color Mix Speed',  feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
   PIXELMASK:    { gdtf: 'Effects1',           pretty: 'Pixel Mask',       feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
