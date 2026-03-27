@@ -277,26 +277,23 @@ function buildGeoTree(prefix, pixelModules, beamType) {
   xml += `        <Axis Name="${prefix} Yoke" Model="Yoke" Position="${POS_YOKE}">\n`;
   xml += `          <Axis Name="${prefix} Head" Model="Head" Position="${POS_HEAD}">\n`;
 
-  // Add GeometryReferences for pixel modules with position offsets
+  // Add GeometryReferences for pixel modules — each module gets its OWN template
   if (pixelModules && pixelModules.length > 0) {
-    // Count total pixel instances across all modules
     let totalPixels = 0;
     for (const pm of pixelModules) totalPixels += pm.patches.length;
-
-    // Calculate X-position offsets to space pixels evenly along the fixture
-    // Bar width ~1m, spread pixels from -halfWidth to +halfWidth
-    const barWidth = totalPixels > 6 ? 0.6 : 0.45; // wider for more pixels
+    const barWidth = totalPixels > 6 ? 0.6 : 0.45;
     const halfWidth = barWidth / 2;
 
     let pixelIndex = 0;
     for (const pm of pixelModules) {
+      // Each pixel module references its own template geometry (e.g. "Pixel_RGB Pixel", "Pixel_White Pixel")
+      const templateName = `Pixel_${pm.name.replace(/\s+/g, '_')}`;
       for (let j = 0; j < pm.patches.length; j++) {
-        // Calculate X offset: evenly spaced from -halfWidth to +halfWidth
         const xOffset = totalPixels > 1
           ? (-halfWidth + (pixelIndex / (totalPixels - 1)) * barWidth).toFixed(6)
           : '0.000000';
         const pixelPos = `{1.000000,0.000000,0.000000,${xOffset}}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,-0.150000}{0,0,0,1}`;
-        xml += `            <GeometryReference Geometry="PixelBeam" Model="BeamModel" Name="${prefix} ${pm.name} ${j + 1}" Position="${pixelPos}">\n`;
+        xml += `            <GeometryReference Geometry="${templateName}" Model="BeamModel" Name="${prefix} ${pm.name} ${j + 1}" Position="${pixelPos}">\n`;
         xml += `              <Break DMXBreak="1" DMXOffset="${pm.patches[j]}"/>\n`;
         xml += `            </GeometryReference>\n`;
         pixelIndex++;
@@ -327,13 +324,14 @@ function buildDMXChannelXml(ch, geoName, resolution, offsetStr) {
 
 // ── Map a geometry name (Yoke, Head, Beam) to a mode-prefixed geometry name ──
 function prefixGeo(prefix, geoName) {
-  // PixelBeam stays as-is (shared template)
-  if (geoName === 'PixelBeam') return 'PixelBeam';
+  // Pixel template names stay as-is (shared across modes)
+  if (geoName.startsWith('Pixel_')) return geoName;
   return `${prefix} ${geoName}`;
 }
 
 // ── Build one DMXMode XML block ──
-function buildModeXml(modeName, prefix, channels, hasPixels) {
+// pixelModuleMap: array of { moduleName, channels[] } for each pixel module
+function buildModeXml(modeName, prefix, channels, pixelModuleMap) {
   let xml = `      <DMXMode Name="${modeName}" Geometry="${prefix} Base" Description="">\n`;
   xml += `        <DMXChannels>\n`;
 
@@ -346,15 +344,17 @@ function buildModeXml(modeName, prefix, channels, hasPixels) {
     xml += buildDMXChannelXml(ch, geoName, res, offset);
   }
 
-  // Pixel template channels (defined once, replicated by GeometryReference)
-  const pixelChannels = channels.filter(c => c.isPixel);
-  if (pixelChannels.length > 0) {
-    let pixelOffset = 1;
-    for (const ch of pixelChannels) {
-      const res = ch.fine ? '2' : '1';
-      const offset = ch.fine ? `${pixelOffset},${pixelOffset + 1}` : `${pixelOffset}`;
-      xml += buildDMXChannelXml(ch, 'PixelBeam', res, offset);
-      pixelOffset += ch.fine ? 2 : 1;
+  // Pixel template channels — grouped by module, each with its own template geometry
+  if (pixelModuleMap && pixelModuleMap.length > 0) {
+    for (const pm of pixelModuleMap) {
+      const templateName = `Pixel_${pm.moduleName.replace(/\s+/g, '_')}`;
+      let pixelOffset = 1;
+      for (const ch of pm.channels) {
+        const res = ch.fine ? '2' : '1';
+        const offset = ch.fine ? `${pixelOffset},${pixelOffset + 1}` : `${pixelOffset}`;
+        xml += buildDMXChannelXml(ch, templateName, res, offset);
+        pixelOffset += ch.fine ? 2 : 1;
+      }
     }
   }
 
@@ -488,18 +488,27 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
     xml += buildGeoTree(m.prefix, m.pixelModules, beamType);
   }
 
-  // Add shared pixel beam template if any mode uses pixels
+  // Add per-module pixel beam templates (each module gets its own template)
   if (hasPixels) {
     const POS_IDENTITY = '{1.000000,0.000000,0.000000,0.000000}{0.000000,1.000000,0.000000,0.000000}{0.000000,0.000000,1.000000,0.000000}{0,0,0,1}';
-    xml += `      <Beam Name="PixelBeam" Model="BeamModel" LampType="LED" BeamType="Wash" BeamAngle="1.000000" BeamRadius="0.025000" FieldAngle="25.000000" RectangleRatio="1.777700" ThrowRatio="1.000000" Position="${POS_IDENTITY}"/>\n`;
+    for (const pm of pixelModules) {
+      const templateName = `Pixel_${pm.name.replace(/\s+/g, '_')}`;
+      xml += `      <Beam Name="${templateName}" Model="BeamModel" LampType="LED" BeamType="Wash" BeamAngle="1.000000" BeamRadius="0.025000" FieldAngle="25.000000" RectangleRatio="1.777700" ThrowRatio="1.000000" Position="${POS_IDENTITY}"/>\n`;
+    }
   }
 
   xml += `    </Geometries>\n`;
 
+  // Build pixelModuleMap — channels grouped by module for template generation
+  const pixelModuleMap = hasPixels ? pixelModules.map(pm => ({
+    moduleName: pm.name,
+    channels: allChannels.filter(ch => ch.moduleIndex === pm.moduleIndex && ch.isPixel),
+  })) : [];
+
   // Build DMXModes — one per mode
   xml += `    <DMXModes>\n`;
   for (const m of modes) {
-    xml += buildModeXml(m.modeName, m.prefix, m.channels, m.pixelModules && m.pixelModules.length > 0);
+    xml += buildModeXml(m.modeName, m.prefix, m.channels, m.pixelModules ? pixelModuleMap : null);
   }
   xml += `    </DMXModes>\n`;
 
