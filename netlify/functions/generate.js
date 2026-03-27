@@ -457,7 +457,7 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
       <FeatureGroups>
 `;
   for (const [group, feats] of featureGroups) {
-    xml += `        <FeatureGroup Name="${group}">`;
+    xml += `        <FeatureGroup Name="${group}" Pretty="${group}">`;
     for (const f of feats) xml += `<Feature Name="${f}"/>`;
     xml += `</FeatureGroup>\n`;
   }
@@ -812,6 +812,8 @@ function postProcess(xml, parsedMA3) {
   xml = fixMasterAttribute(xml);
   xml = fix16bitResolution(xml);
   xml = fixZoomPhysical(xml);
+  xml = fixFeatureGroupPretty(xml);
+  xml = fixChannelSetDMXTo(xml);
   return xml;
 }
 
@@ -824,6 +826,21 @@ function fixZoomPhysical(xml) {
       return `${pre} PhysicalFrom="7.000000" PhysicalTo="55.000000"${close}`;
     }
   );
+}
+
+// Add Pretty="" to FeatureGroups that are missing it (required by XSD)
+function fixFeatureGroupPretty(xml) {
+  return xml.replace(/<FeatureGroup\s([^>]*?)>/g, (m, attrs) => {
+    if (attrs.includes('Pretty=')) return m;
+    const nameMatch = attrs.match(/Name="([^"]+)"/);
+    const pretty = nameMatch ? nameMatch[1] : '';
+    return `<FeatureGroup ${attrs} Pretty="${pretty}">`;
+  });
+}
+
+// Remove invalid DMXTo attribute from ChannelSet elements (not in GDTF XSD)
+function fixChannelSetDMXTo(xml) {
+  return xml.replace(/(<ChannelSet\s[^>]*?)\s*DMXTo="[^"]*"/g, '$1');
 }
 
 // Fix all-zeros or invalid GUIDs
