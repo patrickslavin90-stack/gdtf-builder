@@ -1361,9 +1361,16 @@ function setModelFiles(xml, modelType) {
   const beamModelSet = new Set(beamModels);
 
   if (modelType === 'bar') {
-    // Bar: no base model, yoke + head only
-    if (topGeoModel) modelFileMap[topGeoModel] = 'yoke';
-    if (axes.length >= 1) modelFileMap[axes[0]] = 'head';
+    // Bar: bracket(yoke.3ds) for base+yoke, bar body(head.3ds) for head
+    // Map all unique model names used in geometry
+    const uniqueAxes = [...new Set(axes)];
+    if (topGeoModel) modelFileMap[topGeoModel] = 'yoke'; // base bracket
+    for (const ax of uniqueAxes) {
+      if (!modelFileMap[ax]) {
+        // Last axis (innermost = Head) gets the bar body, others get yoke/bracket
+        modelFileMap[ax] = (ax === uniqueAxes[uniqueAxes.length - 1]) ? 'head' : 'yoke';
+      }
+    }
   } else {
     // Spot/Wash/Strobe: base + yoke + head
     if (topGeoModel) modelFileMap[topGeoModel] = 'base';
