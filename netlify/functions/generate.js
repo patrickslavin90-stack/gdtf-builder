@@ -452,13 +452,17 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
       pixelModules: null,
     });
   } else if (has16bit) {
-    // Basic mode — drop fine channels, 8-bit only
-    const basicChannels = allChannels.map(ch => {
-      if (ch.fine !== null && ch.fine !== undefined) {
-        return { ...ch, fine: null }; // drop fine, becomes 8-bit
+    // Basic mode — drop fine channels, 8-bit only, deduplicate attributes
+    const basicSeen = new Set();
+    const basicChannels = [];
+    for (const ch of allChannels) {
+      const entry = (ch.fine !== null && ch.fine !== undefined) ? { ...ch, fine: null } : { ...ch };
+      const key = entry.gdtf + '_' + entry.geo;
+      if (!basicSeen.has(key)) {
+        basicSeen.add(key);
+        basicChannels.push(entry);
       }
-      return ch;
-    });
+    }
     modes.push({
       modeName: 'Basic',
       prefix: 'Basic',
@@ -570,6 +574,17 @@ const TYPE_TO_ATTR = {
   led_effect: 'LEDENGINEEFFECTS', led_effect_rate: 'LEDENGINEEFFECTRATE', led_effect_fade: 'LEDENGINEEFFECTSTEPTIME',
   strobe_duration: 'STROBEDURATION', strobe_mode: 'STROBEMODE',
   no_function: 'NOFEATURE', reserved: 'NOFEATURE',
+  // Common Gemini variations / aliases
+  effect_rate: 'LEDENGINEEFFECTRATE', effect_fade: 'LEDENGINEEFFECTSTEPTIME',
+  color_macro: 'MACROSELECT', auto_program: 'EFFECTMACROS', program_speed: 'EFFECTMACRORATE',
+  movement_speed: 'POSITIONMSPEED', speed: 'POSITIONMSPEED',
+  strobe: 'SHUTTER', intensity: 'DIMMER',
+  red_fine: 'COLORRGB1', green_fine: 'COLORRGB2', blue_fine: 'COLORRGB3', white_fine: 'COLORRGB4',
+  pan_fine: 'PAN', tilt_fine: 'TILT',
+  gobo_rotation: 'GOBO1_POS', gobo1_rotation: 'GOBO1_POS', gobo2_rotation: 'GOBO2_POS',
+  color_wheel_fine: 'COLOR1', zoom_fine: 'ZOOM', focus_fine: 'FOCUS',
+  cyan_fine: 'COLORSUB_C', magenta_fine: 'COLORSUB_M', yellow_fine: 'COLORSUB_Y',
+  cto_fine: 'CTO', iris_fine: 'IRIS', prism_rotation: 'PRISM_POS',
 };
 
 // ── JSON-only Gemini prompt for text/PDF channel parsing ──
@@ -652,10 +667,27 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
 
 // ── Convert Gemini JSON channel list to buildGDTFFromParsed format ──
 function buildGDTFFromChannelList(channelList, meta) {
-  const channels = channelList.map(ch => {
+  // Deduplicate: if Gemini returned separate coarse+fine entries for the same function,
+  // merge them (set fine on the coarse entry, remove the fine-only entry)
+  const merged = [];
+  const seen = new Set();
+  for (const ch of channelList) {
+    // Skip if this looks like a fine-only channel that was already merged
+    if (ch.type && ch.type.endsWith('_fine')) continue;
     const attrKey = TYPE_TO_ATTR[ch.type] || ch.type.toUpperCase();
-    return { attribute: attrKey, coarse: ch.ch, fine: ch.fine || null };
-  });
+    // Check if the next channel is a fine for this one (consecutive channel number)
+    const fineEntry = channelList.find(f =>
+      f.ch === (ch.fine || ch.ch + 1) && f !== ch &&
+      (f.type === ch.type || f.type === ch.type + '_fine' || (f.name && f.name.toLowerCase().includes('fine')))
+    );
+    const fine = ch.fine || (fineEntry ? fineEntry.ch : null);
+    const key = attrKey + '_' + ch.ch;
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push({ attribute: attrKey, coarse: ch.ch, fine });
+    }
+  }
+  const channels = merged;
 
   const parsed = {
     modules: [{ name: 'Main Module', class: 'Headmover', channels }],
