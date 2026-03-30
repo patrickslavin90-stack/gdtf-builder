@@ -577,8 +577,8 @@ const TEXT_PARSE_PROMPT = `You are a DMX channel list parser for lighting fixtur
 
 Given a user's description of DMX channels (from a PDF, manual, or typed list), extract EVERY channel and return ONLY a JSON array.
 
-For each channel return:
-{"ch":<coarse channel number>,"fine":<fine channel number or null>,"name":"<name as written>","type":"<type key>"}
+For each channel return ONLY these fields (no other fields):
+{"ch":<coarse channel number>,"fine":<fine channel number or null>,"name":"<short name>","type":"<type key>"}
 
 The "type" field MUST be one of these exact keys:
 pan, tilt, pan_tilt_speed,
@@ -600,8 +600,10 @@ Rules:
 - Distinguish CMY (cyan/magenta/yellow) from RGB (red/green/blue) — CMY is subtractive mixing used in profile/spot fixtures, RGB is additive used in LED fixtures
 - If the input says "16-bit" or shows two channels for one function (e.g. "CH1-2 Pan"), set fine to the second channel number
 - Return ONLY valid JSON array, no markdown, no backticks, no explanation
+- Do NOT include DMX ranges, ChannelSets, or detailed value descriptions — only ch, fine, name, type
 - If channel has Pan AND Tilt, this is a moving head fixture
 - "Strobe" as a channel function within shutter = use "shutter", NOT "strobe_duration"
+- For PDFs with multiple modes (Standard/Basic/Extended), extract the FIRST mode listed with the most channels
 
 Example input: "CH1-2 Pan 16bit, CH3 Dimmer, CH4 Red, CH5 Green, CH6 Blue"
 Example output: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},{"ch":3,"fine":null,"name":"Dimmer","type":"dimmer"},{"ch":4,"fine":null,"name":"Red","type":"red"},{"ch":5,"fine":null,"name":"Green","type":"green"},{"ch":6,"fine":null,"name":"Blue","type":"blue"}]`;
@@ -619,6 +621,7 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
 
   // Use flash (not lite) for PDF/image since multimodal needs better model
   const model = mediaBase64 ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite';
+  const maxTokens = mediaBase64 ? 8192 : 4096;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
@@ -627,7 +630,7 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
       body: JSON.stringify({
         system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
         contents: [{ parts: contentParts }],
-        generationConfig: { maxOutputTokens: 4096, temperature: 0.0, responseMimeType: 'application/json' },
+        generationConfig: { maxOutputTokens: maxTokens, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
       }),
     }
   );
