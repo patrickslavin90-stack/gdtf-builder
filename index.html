@@ -1667,23 +1667,62 @@ async function downloadGDTF() {
   URL.revokeObjectURL(url);
 }
 
-// ── Feedback
+// ── Feedback + Supabase
+const SUPABASE_URL = 'https://mvntodsdjftfjbcrvedn.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12bnRvZHNkamZ0ZmpiY3J2ZWRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NTYwMDQsImV4cCI6MjA4OTQzMjAwNH0.4oKeQh4E45O9Kf5MklRUmKW_5t5NvzU3cVf3VGHEIsg';
+
 let _feedbackVote = null;
 function feedbackVote(vote) {
   _feedbackVote = vote;
   document.getElementById('fb-up').classList.toggle('voted', vote === 'up');
   document.getElementById('fb-down').classList.toggle('voted', vote === 'down');
   document.getElementById('feedback-box').classList.add('show');
+  // Change placeholder based on vote
+  const ta = document.getElementById('feedback-text');
+  if (vote === 'up') ta.placeholder = 'Glad it worked! Any comments?';
+  else ta.placeholder = 'What went wrong? Missing channels, wrong attributes, import errors?';
 }
-function sendFeedback() {
+async function sendFeedback() {
   const text = document.getElementById('feedback-text').value.trim();
   const fixName = document.getElementById('fixture-name').value.trim();
-  // Send to mailto as a simple fallback (could be upgraded to API later)
-  const subject = encodeURIComponent('GDTF Builder Feedback: ' + (_feedbackVote === 'up' ? 'Positive' : 'Needs improvement'));
-  const body = encodeURIComponent('Fixture: ' + fixName + '\nVote: ' + _feedbackVote + '\n\n' + (text || '(no comment)'));
-  window.open('mailto:Pat@lmnr.productions?subject=' + subject + '&body=' + body, '_self');
-  // Visual confirmation
-  document.getElementById('feedback-box').innerHTML = '<div style="font-family:var(--mono);font-size:10px;color:var(--green);padding:8px 0">Thanks for your feedback!</div>';
+  const mfr = document.getElementById('manufacturer').value.trim();
+  const channels = document.getElementById('manual-channels').value.trim();
+  const chCount = generatedXML ? (generatedXML.match(/<DMXChannel[\s>]/g) || []).length : 0;
+  const modeMatch = generatedXML ? generatedXML.match(/DMXMode[^>]+Name="([^"]+)"/) : null;
+
+  // Save thumbs-down to Supabase (with input + output for debugging)
+  if (_feedbackVote === 'down') {
+    try {
+      await fetch(SUPABASE_URL + '/rest/v1/gdtf_feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_ANON,
+          'Authorization': 'Bearer ' + SUPABASE_ANON,
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({
+          fixture_name: fixName || null,
+          manufacturer: mfr || null,
+          vote: 'down',
+          feedback_text: text || null,
+          input_type: fileType || 'text',
+          input_data: (channels || '').slice(0, 5000) || null,
+          output_xml: (generatedXML || '').slice(0, 50000) || null,
+          fixture_type: pickerGetValue() || null,
+          channel_count: chCount || null,
+          mode_name: modeMatch ? modeMatch[1] : null,
+          user_agent: navigator.userAgent.slice(0, 200),
+        }),
+      });
+    } catch(e) { /* don't block UI if Supabase fails */ }
+  }
+
+  // Thumbs up — just show thanks (no need to store)
+  document.getElementById('feedback-box').innerHTML =
+    '<div style="font-family:var(--mono);font-size:10px;color:var(--green);padding:8px 0">' +
+    (_feedbackVote === 'down' ? 'Report saved — we\'ll review and improve. Thanks!' : 'Thanks for the feedback!') +
+    '</div>';
 }
 </script>
 
