@@ -625,6 +625,148 @@ Rules:
 Example input: "CH1-2 Pan 16bit, CH3 Dimmer, CH4 Red, CH5 Green, CH6 Blue"
 Example output: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},{"ch":3,"fine":null,"name":"Dimmer","type":"dimmer"},{"ch":4,"fine":null,"name":"Red","type":"red"},{"ch":5,"fine":null,"name":"Green","type":"green"},{"ch":6,"fine":null,"name":"Blue","type":"blue"}]`;
 
+// ── Regex pre-processor: parse common channel list formats without AI ──
+// Returns channel list array or null if it can't parse deterministically
+function parseTextDeterministic(text) {
+  if (!text || !text.trim()) return null;
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  // Keyword → type mapping (case-insensitive)
+  const KEYWORD_MAP = [
+    [/\bpan\b.*\btilt\b.*\bspeed|pan.?tilt.?speed|movement.?speed|p.?t.?speed/i, 'pan_tilt_speed'],
+    [/\bpan\b.*\bfine|pan.?fine/i, null], // skip — merged into coarse
+    [/\btilt\b.*\bfine|tilt.?fine/i, null],
+    [/\bpan\b/i, 'pan'],
+    [/\btilt\b/i, 'tilt'],
+    [/\bdimmer\b.*\bfine|dimmer.?fine/i, null],
+    [/\bdimmer\b|\bintensity\b|\bdim\b/i, 'dimmer'],
+    [/\bshutter\b|\bstrobe\b.*\bshutter|shutter.*\bstrobe\b/i, 'shutter'],
+    [/\bcyan\b|\bred.?cyan|r.?c\b/i, 'cyan'],
+    [/\bmagenta\b|\bgreen.?magenta|g.?m\b/i, 'magenta'],
+    [/\byellow\b|\bblue.?yellow|b.?y\b/i, 'yellow'],
+    [/\bcto\b|\bcolou?r.?temp/i, 'cto'],
+    [/\bctb\b/i, 'ctb'],
+    [/\bcolou?r.?wheel|colou?r.?1|virtual.?colou?r/i, 'color_wheel'],
+    [/\bcolou?r.?mix/i, 'color_mix'],
+    [/\bred\b/i, 'red'],
+    [/\bgreen\b/i, 'green'],
+    [/\bblue\b/i, 'blue'],
+    [/\bwhite\b/i, 'white'],
+    [/\bamber\b/i, 'amber'],
+    [/\buv\b|ultra.?violet/i, 'uv'],
+    [/\blime\b/i, 'lime'],
+    [/\bgobo\s*1.*\brot|gobo\s*1.*\bpos|gobo\s*1.*\bspin|gobo.?1.?fine/i, 'gobo1_pos'],
+    [/\bgobo\s*2.*\brot|gobo\s*2.*\bpos|gobo\s*2.*\bspin/i, 'gobo2_pos'],
+    [/\bgobo\s*1\b|\bgobo\b(?!\s*2)/i, 'gobo1'],
+    [/\bgobo\s*2\b/i, 'gobo2'],
+    [/\banim|animation/i, 'animation_wheel'],
+    [/\bzoom\b.*\bfine|zoom.?fine/i, null],
+    [/\bzoom\b/i, 'zoom'],
+    [/\bfocus\b.*\bdist|focus.?distance/i, 'focus_distance'],
+    [/\bfocus\b.*\bfine|focus.?fine/i, null],
+    [/\bfocus\b.*\bmode/i, 'focus_mode'],
+    [/\bfocus\b/i, 'focus'],
+    [/\biris\b/i, 'iris'],
+    [/\bprism\b.*\brot|prism.*\bpos|prism.*\bspin|prism.*\bindex/i, 'prism_pos'],
+    [/\bprism\b/i, 'prism'],
+    [/\bfrost\b/i, 'frost'],
+    [/\bflower\b.*\beffect\b(?!.*\bred|.*\bgreen|.*\bblue|.*\bwhite|.*\bshutter|.*\bdimmer|.*\bcolou?r|.*\bmacro|.*\bspeed|.*\bfade)/i, 'effect'],
+    [/\bflower\b.*\bred|flower.?effect.?r/i, 'red'],
+    [/\bflower\b.*\bgreen|flower.?effect.?g/i, 'green'],
+    [/\bflower\b.*\bblue|flower.?effect.?b/i, 'blue'],
+    [/\bflower\b.*\bwhite|flower.?effect.?w/i, 'white'],
+    [/\bflower\b.*\bshutter|flower.?effect.?shutter/i, 'shutter2'],
+    [/\bflower\b.*\bdimmer|flower.?effect.?dim/i, 'dimmer2'],
+    [/\bflower\b.*\bcolou?r.*\bmacro/i, 'macro'],
+    [/\bflower\b.*\bspeed|pixel.?effect.?speed/i, 'led_effect_rate'],
+    [/\bflower\b.*\bfade|pixel.?effect.?fade/i, 'led_effect_fade'],
+    [/\bpixel\s*effect\b|\beffect\b.*\bpattern/i, 'effect'],
+    [/\beffect\b.*\bspeed|pixel.?speed/i, 'led_effect_rate'],
+    [/\beffect\b.*\bfade/i, 'led_effect_fade'],
+    [/\beffect\b.*\brot|effect.*\bindex/i, 'effect_pos'],
+    [/\beffect\b/i, 'effect'],
+    [/\bspeed\b/i, 'pan_tilt_speed'],
+    [/\breset\b|control.*reset|power.*special|special.*function/i, 'control'],
+    [/\bmacro\b|auto.?prog/i, 'macro'],
+    [/\bpwm\b|led.?freq/i, 'pwm_frequency'],
+    [/\bfan\b/i, 'fan_mode'],
+    [/\breserved\b|\bno func/i, 'no_function'],
+  ];
+
+  function matchType(name) {
+    for (const [regex, type] of KEYWORD_MAP) {
+      if (regex.test(name)) return type;
+    }
+    return null;
+  }
+
+  // Parse each line to extract channel number and name
+  const rawChannels = [];
+  for (const line of lines) {
+    // Skip header/label lines
+    if (/^(ch|channel|dmx|mode|function|value|description|type)/i.test(line) && !/\d/.test(line.slice(0, 3))) continue;
+    if (/^[-=_]+$/.test(line)) continue;
+
+    // Try various formats:
+    // "CH1-2 Pan 16bit" / "CH1,2 Pan" / "CH 1 Pan"
+    let m = line.match(/^ch\s*(\d+)\s*[-,]\s*(\d+)\s+(.+)/i);
+    if (m) { rawChannels.push({ ch: +m[1], fine: +m[2], name: m[3].trim() }); continue; }
+
+    // "CH1 Pan" / "CH 1 Pan"
+    m = line.match(/^ch\s*(\d+)\s+(.+)/i);
+    if (m) { rawChannels.push({ ch: +m[1], fine: null, name: m[2].trim() }); continue; }
+
+    // "1  Pan Movement  8bit" / "1-2  Pan  16bit" (number-first, tab/space separated)
+    m = line.match(/^(\d+)\s*[-,]\s*(\d+)\s+(.+)/);
+    if (m) { rawChannels.push({ ch: +m[1], fine: +m[2], name: m[3].trim() }); continue; }
+
+    m = line.match(/^(\d+)\s+(.+)/);
+    if (m && +m[1] <= 512) { rawChannels.push({ ch: +m[1], fine: null, name: m[2].trim() }); continue; }
+  }
+
+  if (rawChannels.length < 2) return null; // too few channels, let Gemini handle it
+
+  // Map names to types and detect fine channels
+  const channels = [];
+  for (let i = 0; i < rawChannels.length; i++) {
+    const rc = rawChannels[i];
+
+    // Check if this is a fine-only channel (merge into previous coarse)
+    if (/\bfine\b/i.test(rc.name) && channels.length > 0) {
+      const prev = channels[channels.length - 1];
+      if (!prev.fine && rc.ch === prev.ch + 1) {
+        prev.fine = rc.ch;
+        continue;
+      }
+    }
+
+    // Check if "16bit" or "16 bit" in name implies the next channel is fine
+    let fine = rc.fine;
+    if (!fine && /16\s*-?\s*bit/i.test(rc.name) && i + 1 < rawChannels.length) {
+      const next = rawChannels[i + 1];
+      if (/\bfine\b/i.test(next.name) && next.ch === rc.ch + 1) {
+        fine = next.ch;
+      }
+    }
+
+    const type = matchType(rc.name);
+    if (type === null) continue; // skip fine-only entries (matchType returns null)
+
+    channels.push({
+      ch: rc.ch,
+      fine: fine,
+      name: rc.name.replace(/\s*(8|16)\s*-?\s*bit\s*/gi, '').replace(/\s*\(.*?\)\s*/g, '').trim(),
+      type: type,
+    });
+  }
+
+  // Validate: need at least 2 channels with recognized types
+  const recognized = channels.filter(c => c.type !== 'no_function');
+  if (recognized.length < 2) return null;
+
+  return channels;
+}
+
 // ── Call Gemini for JSON-only text parsing (not XML generation) ──
 async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
   // Build content parts — text + optional PDF/image
@@ -1061,6 +1203,7 @@ exports.SYSTEM_PROMPT = SYSTEM_PROMPT;
 exports.prepareRequest = prepareRequest;
 exports.callGemini = callGemini;
 exports.postProcess = postProcess;
+exports.parseTextDeterministic = parseTextDeterministic;
 
 // Standard Netlify Function — tries sync, falls back to async for complex fixtures
 exports.handler = async function(event) {
@@ -1119,7 +1262,16 @@ exports.handler = async function(event) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'No channel data provided' }) };
       }
 
-      const channelList = await parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
+      // Try deterministic regex parsing first (free, instant, reliable)
+      let channelList = null;
+      if (!mediaBase64 && userText.trim()) {
+        channelList = parseTextDeterministic(userText);
+      }
+
+      // Fall back to Gemini for PDFs, images, or text that regex couldn't parse
+      if (!channelList) {
+        channelList = await parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
+      }
       const meta = { ...body, ...extractedMeta };
       xml = buildGDTFFromChannelList(channelList, meta);
     }
