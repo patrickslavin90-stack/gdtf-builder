@@ -185,29 +185,43 @@ const ATTR_DB = {
   COLORRGB3:    { gdtf: 'ColorAdd_B',        pretty: 'Blue',             feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
   COLORRGB4:    { gdtf: 'ColorAdd_W',        pretty: 'White',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
   COLORRGB5:    { gdtf: 'ColorAdd_W',        pretty: 'White',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
-  COLOR1:       { gdtf: 'Color1',            pretty: 'Color Wheel',      feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
-  CTO:          { gdtf: 'CTO',              pretty: 'CTO',              feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Beam' },
-  CTC:          { gdtf: 'CTO',              pretty: 'CTO',              feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Beam' },
-  COLORMIXER:   { gdtf: 'ColorMixer1',       pretty: 'Color Mixer',      feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
-  COLORMIXER2:  { gdtf: 'ColorMixer2',       pretty: 'Color Mixer 2',    feature: 'Color.Color',        physical: 'None',           geo: 'Beam' },
-  COLORTEMPERATURE: { gdtf: 'ColorTemperature', pretty: 'Color Temp',    feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Beam' },
-  GOBO1:        { gdtf: 'Gobo1',             pretty: 'Gobo 1',           feature: 'Gobo.Gobo',          physical: 'None',           geo: 'Beam' },
-  GOBO1_POS:    { gdtf: 'Gobo1Pos',          pretty: 'Gobo 1 Rotate',    feature: 'Gobo.Gobo',          physical: 'Angle',          geo: 'Beam' },
-  GOBO2:        { gdtf: 'Gobo2',             pretty: 'Gobo 2',           feature: 'Gobo.Gobo',          physical: 'None',           geo: 'Beam' },
-  GOBO2_POS:    { gdtf: 'Gobo2Pos',          pretty: 'Gobo 2 Rotate',    feature: 'Gobo.Gobo',          physical: 'Angle',          geo: 'Beam' },
-  ZOOM:         { gdtf: 'Zoom',             pretty: 'Zoom',             feature: 'Beam.Zoom',          physical: 'Angle',          geo: 'Beam', physFrom: 7, physTo: 55 },
-  FOCUS:        { gdtf: 'Focus1',            pretty: 'Focus',            feature: 'Beam.Focus',         physical: 'None',           geo: 'Beam' },
-  FOCUSMODE:    { gdtf: 'FocusMode',         pretty: 'Focus Mode',       feature: 'Beam.Focus',         physical: 'None',           geo: 'Beam' },
-  IRIS:         { gdtf: 'Iris',              pretty: 'Iris',             feature: 'Beam.Iris',          physical: 'None',           geo: 'Beam', physFrom: 0, physTo: 1 },
-  FROST:        { gdtf: 'Frost1',            pretty: 'Frost',            feature: 'Beam.Frost',         physical: 'None',           geo: 'Beam' },
-  PRISM:        { gdtf: 'Prism1',            pretty: 'Prism',            feature: 'Beam.Prism',         physical: 'None',           geo: 'Beam' },
-  PRISM_POS:    { gdtf: 'Prism1Pos',         pretty: 'Prism Rotate',     feature: 'Beam.Prism',         physical: 'Angle',          geo: 'Beam' },
-  EFFECTWHEEL:  { gdtf: 'Effects1',          pretty: 'Effect Wheel',     feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
-  EFFECTINDEXROTATE: { gdtf: 'Effects1Pos',  pretty: 'Effect Rotate',    feature: 'Effect.Effect',      physical: 'Angle',          geo: 'Beam' },
-  ANIMATIONWHEEL: { gdtf: 'AnimationWheel1', pretty: 'Animation Wheel',  feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
-  POSITIONMSPEED: { gdtf: 'PositionSpeed',   pretty: 'Movement Speed',   feature: 'Position.Speed',     physical: 'None',           geo: 'Head' },
-  EFFECTMACROS: { gdtf: 'EffectMacros',      pretty: 'Effect Macros',    feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
-  PWMFREQUENCY: { gdtf: 'Control1',          pretty: 'PWM Frequency',    feature: 'Control.Control',    physical: 'Frequency',      geo: 'Beam' },
+  COLOR1:       { gdtf: 'Color1',            pretty: 'Color Wheel',      feature: 'Color.Color',        physical: 'None',           geo: 'Head' },
+  CTO:          { gdtf: 'CTO',              pretty: 'CTO',              feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Head' },
+  CTC:          { gdtf: 'CTO',              pretty: 'CTO',              feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Head' },
+  CTB:          { gdtf: 'CTB',              pretty: 'CTB',              feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Head' },
+  COLORMIXER:   { gdtf: 'ColorMixer1',       pretty: 'Color Mixer',      feature: 'Color.Color',        physical: 'None',           geo: 'Head' },
+  COLORMIXER2:  { gdtf: 'ColorMixer2',       pretty: 'Color Mixer 2',    feature: 'Color.Color',        physical: 'None',           geo: 'Head' },
+  COLORTEMPERATURE: { gdtf: 'ColorTemperature', pretty: 'Color Temp',    feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Head' },
+  // CMY subtractive color (Mistral, Robin series, etc.)
+  COLORSUB_C:   { gdtf: 'ColorSub_C',        pretty: 'Cyan',             feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head' },
+  COLORSUB_M:   { gdtf: 'ColorSub_M',        pretty: 'Magenta',          feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head' },
+  COLORSUB_Y:   { gdtf: 'ColorSub_Y',        pretty: 'Yellow',           feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head' },
+  // Additional color types
+  COLORRGB_AMBER: { gdtf: 'ColorAdd_A',      pretty: 'Amber',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB_UV:  { gdtf: 'ColorAdd_UV',       pretty: 'UV',               feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  COLORRGB_LIME:{ gdtf: 'ColorAdd_Lime',     pretty: 'Lime',             feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
+  GOBO1:        { gdtf: 'Gobo1',             pretty: 'Gobo 1',           feature: 'Gobo.Gobo',          physical: 'None',           geo: 'Head' },
+  GOBO1_POS:    { gdtf: 'Gobo1Pos',          pretty: 'Gobo 1 Rotate',    feature: 'Gobo.Gobo',          physical: 'Angle',          geo: 'Head' },
+  GOBO2:        { gdtf: 'Gobo2',             pretty: 'Gobo 2',           feature: 'Gobo.Gobo',          physical: 'None',           geo: 'Head' },
+  GOBO2_POS:    { gdtf: 'Gobo2Pos',          pretty: 'Gobo 2 Rotate',    feature: 'Gobo.Gobo',          physical: 'Angle',          geo: 'Head' },
+  ZOOM:         { gdtf: 'Zoom',             pretty: 'Zoom',             feature: 'Beam.Zoom',          physical: 'Angle',          geo: 'Head', physFrom: 7, physTo: 55 },
+  FOCUS:        { gdtf: 'Focus1',            pretty: 'Focus',            feature: 'Beam.Focus',         physical: 'None',           geo: 'Head' },
+  FOCUSMODE:    { gdtf: 'FocusMode',         pretty: 'Focus Mode',       feature: 'Beam.Focus',         physical: 'None',           geo: 'Head' },
+  FOCUSDISTANCE:{ gdtf: 'Focus1Distance',    pretty: 'Focus Distance',   feature: 'Beam.Focus',         physical: 'Length',         geo: 'Head' },
+  IRIS:         { gdtf: 'Iris',              pretty: 'Iris',             feature: 'Beam.Iris',          physical: 'None',           geo: 'Head', physFrom: 0, physTo: 1 },
+  FROST:        { gdtf: 'Frost1',            pretty: 'Frost',            feature: 'Beam.Frost',         physical: 'None',           geo: 'Head' },
+  PRISM:        { gdtf: 'Prism1',            pretty: 'Prism',            feature: 'Beam.Prism',         physical: 'None',           geo: 'Head' },
+  PRISM_POS:    { gdtf: 'Prism1Pos',         pretty: 'Prism Rotate',     feature: 'Beam.Prism',         physical: 'Angle',          geo: 'Head' },
+  EFFECTWHEEL:  { gdtf: 'Effects1',          pretty: 'Effect Wheel',     feature: 'Effect.Effect',      physical: 'None',           geo: 'Head' },
+  EFFECTINDEXROTATE: { gdtf: 'Effects1Pos',  pretty: 'Effect Rotate',    feature: 'Effect.Effect',      physical: 'Angle',          geo: 'Head' },
+  ANIMATIONWHEEL: { gdtf: 'AnimationWheel1', pretty: 'Animation Wheel',  feature: 'Effect.Effect',      physical: 'None',           geo: 'Head' },
+  POSITIONMSPEED: { gdtf: 'PositionSpeed',   pretty: 'Movement Speed',   feature: 'Position.Speed',     physical: 'None',           geo: 'Base' },
+  EFFECTMACROS: { gdtf: 'EffectMacros',      pretty: 'Effect Macros',    feature: 'Effect.Effect',      physical: 'None',           geo: 'Head' },
+  PWMFREQUENCY: { gdtf: 'Control1',          pretty: 'PWM Frequency',    feature: 'Control.Control',    physical: 'Frequency',      geo: 'Base' },
+  // Control
+  FANMODE:      { gdtf: 'FanMode',           pretty: 'Fan Mode',         feature: 'Control.Control',    physical: 'None',           geo: 'Base' },
+  DIMMERCURVE:  { gdtf: 'DimmerCurve',       pretty: 'Dimmer Curve',     feature: 'Control.Control',    physical: 'None',           geo: 'Base' },
+  NOFEATURE:    { gdtf: 'NoFeature',         pretty: 'Reserved',         feature: 'Control.Control',    physical: 'None',           geo: 'Beam' },
   LEDENGINEEFFECTS: { gdtf: 'LEDEffect1',    pretty: 'LED Effects',      feature: 'Effect.Effect',      physical: 'None',           geo: 'Beam' },
   LEDENGINEEFFECTRATE: { gdtf: 'LEDEffect1Rate', pretty: 'LED Effect Rate', feature: 'Effect.Effect',   physical: 'None',           geo: 'Beam' },
   LEDENGINEEFFECTSTEPTIME: { gdtf: 'LEDEffect1FadeTime', pretty: 'LED Effect Step', feature: 'Effect.Effect', physical: 'None',     geo: 'Beam' },
@@ -536,6 +550,112 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
 function translateMA3Attr(attr) {
   const info = ATTR_DB[attr.toUpperCase()];
   return info ? `${info.gdtf} (${info.pretty})` : attr;
+}
+
+// ── Gemini JSON type → ATTR_DB key mapping ──
+const TYPE_TO_ATTR = {
+  pan: 'PAN', tilt: 'TILT', pan_tilt_speed: 'POSITIONMSPEED',
+  shutter: 'SHUTTER', shutter2: 'SHUTTER2', dimmer: 'DIMMER', dimmer2: 'DIM2', dimmer3: 'DIM3',
+  zoom: 'ZOOM', focus: 'FOCUS', focus_distance: 'FOCUSDISTANCE', focus_mode: 'FOCUSMODE',
+  iris: 'IRIS', frost: 'FROST', prism: 'PRISM', prism_pos: 'PRISM_POS',
+  color_wheel: 'COLOR1', cyan: 'COLORSUB_C', magenta: 'COLORSUB_M', yellow: 'COLORSUB_Y',
+  cto: 'CTO', ctb: 'CTB', color_mix: 'COLORMIXER', color_temperature: 'COLORTEMPERATURE',
+  red: 'COLORRGB1', green: 'COLORRGB2', blue: 'COLORRGB3', white: 'COLORRGB4',
+  amber: 'COLORRGB_AMBER', uv: 'COLORRGB_UV', lime: 'COLORRGB_LIME',
+  gobo1: 'GOBO1', gobo1_pos: 'GOBO1_POS', gobo2: 'GOBO2', gobo2_pos: 'GOBO2_POS',
+  animation_wheel: 'ANIMATIONWHEEL', effect: 'EFFECTWHEEL', effect_pos: 'EFFECTINDEXROTATE',
+  macro: 'MACROSELECT', effect_macro: 'EFFECTMACROS',
+  control: 'FIXTUREGLOBALRESET', reset: 'FIXTUREGLOBALRESET',
+  pwm_frequency: 'PWMFREQUENCY', fan_mode: 'FANMODE', dimmer_curve: 'DIMMERCURVE',
+  led_effect: 'LEDENGINEEFFECTS', led_effect_rate: 'LEDENGINEEFFECTRATE', led_effect_fade: 'LEDENGINEEFFECTSTEPTIME',
+  strobe_duration: 'STROBEDURATION', strobe_mode: 'STROBEMODE',
+  no_function: 'NOFEATURE', reserved: 'NOFEATURE',
+};
+
+// ── JSON-only Gemini prompt for text/PDF channel parsing ──
+const TEXT_PARSE_PROMPT = `You are a DMX channel list parser for lighting fixtures.
+
+Given a user's description of DMX channels (from a PDF, manual, or typed list), extract EVERY channel and return ONLY a JSON array.
+
+For each channel return:
+{"ch":<coarse channel number>,"fine":<fine channel number or null>,"name":"<name as written>","type":"<type key>"}
+
+The "type" field MUST be one of these exact keys:
+pan, tilt, pan_tilt_speed,
+shutter, shutter2, dimmer, dimmer2, dimmer3,
+zoom, focus, focus_distance, focus_mode,
+color_wheel, cyan, magenta, yellow, cto, ctb, color_mix, color_temperature,
+red, green, blue, white, amber, uv, lime,
+gobo1, gobo1_pos, gobo2, gobo2_pos,
+animation_wheel, iris, prism, prism_pos, frost,
+control, reset, effect, effect_pos, macro, effect_macro,
+pwm_frequency, fan_mode, dimmer_curve,
+led_effect, led_effect_rate, led_effect_fade,
+strobe_duration, strobe_mode,
+no_function, reserved
+
+Rules:
+- Include ALL channels from the input, never skip any
+- If a channel is "fine" for another, set "fine" on the coarse entry, do NOT add a separate fine entry
+- Distinguish CMY (cyan/magenta/yellow) from RGB (red/green/blue) — CMY is subtractive mixing used in profile/spot fixtures, RGB is additive used in LED fixtures
+- If the input says "16-bit" or shows two channels for one function (e.g. "CH1-2 Pan"), set fine to the second channel number
+- Return ONLY valid JSON array, no markdown, no backticks, no explanation
+- If channel has Pan AND Tilt, this is a moving head fixture
+- "Strobe" as a channel function within shutter = use "shutter", NOT "strobe_duration"
+
+Example input: "CH1-2 Pan 16bit, CH3 Dimmer, CH4 Red, CH5 Green, CH6 Blue"
+Example output: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},{"ch":3,"fine":null,"name":"Dimmer","type":"dimmer"},{"ch":4,"fine":null,"name":"Red","type":"red"},{"ch":5,"fine":null,"name":"Green","type":"green"},{"ch":6,"fine":null,"name":"Blue","type":"blue"}]`;
+
+// ── Call Gemini for JSON-only text parsing (not XML generation) ──
+async function parseTextWithGemini(apiKey, userText) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
+        contents: [{ parts: [{ text: userText }] }],
+        generationConfig: { maxOutputTokens: 4096, temperature: 0.0, responseMimeType: 'application/json' },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`Gemini ${res.status}: ${err.error?.message || 'Unknown'}`);
+  }
+  const data = await res.json();
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  let text = '';
+  for (const part of parts) { if (!part.thought) text += (part.text || ''); }
+  if (!text) throw new Error('Empty Gemini response');
+  // Parse JSON — strip any markdown wrapping
+  text = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+  const channelList = JSON.parse(text);
+  if (!Array.isArray(channelList)) throw new Error('Gemini returned non-array JSON');
+  return channelList;
+}
+
+// ── Convert Gemini JSON channel list to buildGDTFFromParsed format ──
+function buildGDTFFromChannelList(channelList, meta) {
+  const channels = channelList.map(ch => {
+    const attrKey = TYPE_TO_ATTR[ch.type] || ch.type.toUpperCase();
+    return { attribute: attrKey, coarse: ch.ch, fine: ch.fine || null };
+  });
+
+  const parsed = {
+    modules: [{ name: 'Main Module', class: 'Headmover', channels }],
+    instances: [{ moduleIndex: 0, patch: 1 }],
+    grouped: { 0: [1] },
+  };
+
+  if (!meta.dmxMode) {
+    let slots = 0;
+    for (const ch of channels) slots += ch.fine ? 2 : 1;
+    meta.dmxMode = slots + 'CH';
+  }
+
+  return buildGDTFFromParsed(parsed, meta);
 }
 
 // Build instance info string for the Gemini prompt
@@ -935,11 +1055,20 @@ exports.handler = async function(event) {
     if (parsedMA3 && (body.ma3XmlpBase64 || body.ma3Xml)) {
       xml = buildGDTFFromParsed(parsedMA3, { ...body, ...extractedMeta });
     } else {
-      // Text input — use Gemini
-      const isComplex = (expectedChannels || 0) > 15;
-      const rawXml = await callGemini(apiKey, prompt, isComplex);
-      if (!rawXml) return { statusCode: 502, headers, body: JSON.stringify({ error: 'Empty Gemini response' }) };
-      xml = postProcess(rawXml, parsedMA3);
+      // Text/PDF input — two-step: Gemini parses text to JSON, then deterministic build
+      const userText = [
+        body.channels || '',
+        body.existingXml ? 'EXISTING XML:\n' + body.existingXml.slice(0, 10000) : '',
+        body.notes || '',
+      ].filter(Boolean).join('\n\n');
+
+      if (!userText.trim()) {
+        return { statusCode: 400, headers, body: JSON.stringify({ error: 'No channel data provided' }) };
+      }
+
+      const channelList = await parseTextWithGemini(apiKey, userText);
+      const meta = { ...body, ...extractedMeta };
+      xml = buildGDTFFromChannelList(channelList, meta);
     }
 
     // Validate channel count — count only channels in the first DMXMode (primary mode)
