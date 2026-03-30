@@ -1421,6 +1421,8 @@ async function generate() {
     }
     if (fileType === 'text' && fileContent) payload.existingXml = fileContent.includes('<GDTF') ? fileContent : null;
     if (fileType === 'text' && fileContent && !payload.existingXml) payload.channels = (channels ? channels + '\n\n' : '') + 'FILE CONTENT:\n' + fileContent.slice(0, 8000);
+    if (fileType === 'pdf' && fileContent) payload.pdfBase64 = fileContent;
+    if (fileType === 'image' && fileContent) payload.imageBase64 = fileContent;
 
     const res = await fetch('/api/generate', {
       method: 'POST',

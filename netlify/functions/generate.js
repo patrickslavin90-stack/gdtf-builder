@@ -607,15 +607,26 @@ Example input: "CH1-2 Pan 16bit, CH3 Dimmer, CH4 Red, CH5 Green, CH6 Blue"
 Example output: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},{"ch":3,"fine":null,"name":"Dimmer","type":"dimmer"},{"ch":4,"fine":null,"name":"Red","type":"red"},{"ch":5,"fine":null,"name":"Green","type":"green"},{"ch":6,"fine":null,"name":"Blue","type":"blue"}]`;
 
 // ── Call Gemini for JSON-only text parsing (not XML generation) ──
-async function parseTextWithGemini(apiKey, userText) {
+async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
+  // Build content parts — text + optional PDF/image
+  const contentParts = [];
+  if (mediaBase64 && mediaType) {
+    contentParts.push({ inline_data: { mime_type: mediaType, data: mediaBase64 } });
+    contentParts.push({ text: 'Extract ALL DMX channels from this document. ' + (userText || '') });
+  } else {
+    contentParts.push({ text: userText });
+  }
+
+  // Use flash (not lite) for PDF/image since multimodal needs better model
+  const model = mediaBase64 ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite';
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
-        contents: [{ parts: [{ text: userText }] }],
+        contents: [{ parts: contentParts }],
         generationConfig: { maxOutputTokens: 4096, temperature: 0.0, responseMimeType: 'application/json' },
       }),
     }
@@ -1062,11 +1073,16 @@ exports.handler = async function(event) {
         body.notes || '',
       ].filter(Boolean).join('\n\n');
 
-      if (!userText.trim()) {
+      // Determine if we have a PDF or image upload
+      let mediaBase64 = null, mediaType = null;
+      if (body.pdfBase64) { mediaBase64 = body.pdfBase64; mediaType = 'application/pdf'; }
+      else if (body.imageBase64) { mediaBase64 = body.imageBase64; mediaType = 'image/jpeg'; }
+
+      if (!userText.trim() && !mediaBase64) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'No channel data provided' }) };
       }
 
-      const channelList = await parseTextWithGemini(apiKey, userText);
+      const channelList = await parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
       const meta = { ...body, ...extractedMeta };
       xml = buildGDTFFromChannelList(channelList, meta);
     }
