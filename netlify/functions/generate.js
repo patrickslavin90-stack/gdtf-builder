@@ -268,9 +268,17 @@ const ATTR_DB = {
 };
 
 function lookupAttr(ma3Name) {
-  return ATTR_DB[ma3Name.toUpperCase()] || {
-    gdtf: ma3Name, pretty: ma3Name, feature: 'Control.Control', physical: 'None', geo: 'Beam'
-  };
+  // Handle zone-suffixed attributes (e.g. COLORRGB1_Z2 → look up COLORRGB1)
+  const key = ma3Name.toUpperCase();
+  if (ATTR_DB[key]) return ATTR_DB[key];
+  const baseKey = key.replace(/_Z\d+$/, '');
+  if (ATTR_DB[baseKey]) {
+    const base = ATTR_DB[baseKey];
+    const zoneMatch = key.match(/_Z(\d+)$/);
+    const zone = zoneMatch ? zoneMatch[1] : '';
+    return { ...base, gdtf: base.gdtf + (zone ? '_Z' + zone : ''), pretty: base.pretty + (zone ? ' Z' + zone : '') };
+  }
+  return { gdtf: ma3Name, pretty: ma3Name, feature: 'Control.Control', physical: 'None', geo: 'Beam' };
 }
 
 function translateMA3Attr(attr) {
@@ -831,7 +839,27 @@ function buildGDTFFromChannelList(channelList, meta) {
       merged.push({ attribute: attrKey, coarse: ch.ch, fine });
     }
   }
-  const channels = merged;
+  // Make duplicate attributes unique — multi-zone fixtures (e.g. Spiider 3x RGBW)
+  // Append zone number when same attribute appears multiple times
+  const attrCount = {};
+  for (const ch of merged) {
+    attrCount[ch.attribute] = (attrCount[ch.attribute] || 0) + 1;
+  }
+  const attrIndex = {};
+  const channels = merged.map(ch => {
+    if (attrCount[ch.attribute] > 1) {
+      attrIndex[ch.attribute] = (attrIndex[ch.attribute] || 0) + 1;
+      // Create a unique attribute name with zone suffix
+      const suffix = attrIndex[ch.attribute];
+      return {
+        ...ch,
+        attribute: ch.attribute + '_Z' + suffix,
+        // Store original for ATTR_DB lookup
+        _originalAttr: ch.attribute,
+      };
+    }
+    return ch;
+  });
 
   const parsed = {
     modules: [{ name: 'Main Module', class: 'Headmover', channels }],
