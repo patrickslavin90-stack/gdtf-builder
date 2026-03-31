@@ -849,21 +849,46 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
 
 // ── Process a single mode's channel list: dedup, merge fine, zone-suffix ──
 function processChannelList(channelList) {
+  // First pass: collect all used channel numbers to detect overlaps
+  const usedChannels = new Set();
+  for (const ch of channelList) usedChannels.add(ch.ch);
+
   // Merge fine channels
   const merged = [];
   const seen = new Set();
+  const usedOffsets = new Set(); // track which offsets are already assigned
   for (const ch of channelList) {
     if (ch.type && ch.type.endsWith('_fine')) continue;
     const attrKey = TYPE_TO_ATTR[ch.type] || ch.type.toUpperCase();
-    const fineEntry = channelList.find(f =>
-      f.ch === (ch.fine || ch.ch + 1) && f !== ch &&
-      (f.type === ch.type || f.type === ch.type + '_fine' || (f.name && f.name.toLowerCase().includes('fine')))
-    );
-    const fine = ch.fine || (fineEntry ? fineEntry.ch : null);
+
+    // Validate fine channel: must be exactly coarse + 1
+    let fine = null;
+    if (ch.fine && ch.fine === ch.ch + 1) {
+      fine = ch.fine; // valid 16-bit pair
+    } else if (ch.fine && ch.fine !== ch.ch + 1) {
+      // Gemini gave wrong fine (e.g. CH28 fine:30 skipping CH29)
+      // Check if coarse+1 is a fine entry in the list
+      const nextCh = channelList.find(f => f.ch === ch.ch + 1 && f !== ch &&
+        (f.name && f.name.toLowerCase().includes('fine')));
+      fine = nextCh ? ch.ch + 1 : null; // only use if next is explicitly fine
+    } else {
+      // No fine specified — check if next channel is a fine for this one
+      const fineEntry = channelList.find(f =>
+        f.ch === ch.ch + 1 && f !== ch &&
+        (f.type === ch.type || f.type === ch.type + '_fine' || (f.name && f.name.toLowerCase().includes('fine')))
+      );
+      if (fineEntry) fine = fineEntry.ch;
+    }
+
+    // Skip if this channel number is already used as a fine for another channel
+    if (usedOffsets.has(ch.ch)) continue;
+
     const key = attrKey + '_' + ch.ch;
     if (!seen.has(key)) {
       seen.add(key);
       merged.push({ attribute: attrKey, coarse: ch.ch, fine });
+      usedOffsets.add(ch.ch);
+      if (fine) usedOffsets.add(fine);
     }
   }
   // Zone-suffix duplicates
