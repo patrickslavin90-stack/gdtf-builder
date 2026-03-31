@@ -598,14 +598,33 @@ const TYPE_TO_ATTR = {
 };
 
 // ── JSON-only Gemini prompt for text/PDF channel parsing ──
-const TEXT_PARSE_PROMPT = `You are a DMX channel list parser for lighting fixtures.
+const TEXT_PARSE_PROMPT = `You are a DMX channel list parser for professional lighting fixtures.
 
-Given a user's description of DMX channels (from a PDF, manual, or typed list), extract EVERY channel and return ONLY a JSON array.
+CRITICAL: DMX charts read DOWNWARD — each COLUMN is a separate mode, NOT a continuation.
 
-For each channel return ONLY these fields (no other fields):
-{"ch":<coarse channel number>,"fine":<fine channel number or null>,"name":"<short name>","type":"<type key>"}
+Return a JSON object (not array) with this structure:
+{
+  "modes": [
+    {
+      "name": "Mode 1",
+      "channelCount": 49,
+      "channels": [
+        {"ch":1,"fine":2,"name":"Pan","type":"pan"},
+        {"ch":3,"fine":null,"name":"Dimmer","type":"dimmer"}
+      ]
+    }
+  ]
+}
 
-The "type" field MUST be one of these exact keys:
+HOW TO READ DMX CHARTS:
+- DMX protocol tables have NUMBERED COLUMNS for different modes (e.g. columns 1, 2, 3, 4)
+- Each column represents a SEPARATE and COMPLETE mode — read DOWN each column independently
+- A "*" or blank in a column means that channel does NOT exist in that mode — SKIP IT
+- Channel numbers in each column are independent — Mode 1 might use CH1-49, Mode 2 might use CH1-27
+- If a row shows "Pan Fine (16 bit)" as a separate row after "Pan (8 bit)", the fine channel number is the NEXT sequential number — set "fine" on the Pan entry
+- If there is a mode overview table listing mode names and channel counts, use those names and verify your channel counts match
+
+CHANNEL TYPE KEYS (use exactly one per channel):
 pan, tilt, pan_tilt_speed,
 shutter, shutter2, dimmer, dimmer2, dimmer3,
 zoom, focus, focus_distance, focus_mode,
@@ -619,19 +638,24 @@ led_effect, led_effect_rate, led_effect_fade,
 strobe_duration, strobe_mode,
 no_function, reserved
 
-Rules:
-- Include ALL channels from the input, never skip any
+RULES:
+- Extract ALL modes found in the document, each as a separate entry in the modes array
+- For each mode, include ONLY channels where that mode has a number (not * or blank)
 - If a channel is "fine" for another, set "fine" on the coarse entry, do NOT add a separate fine entry
-- Distinguish CMY (cyan/magenta/yellow) from RGB (red/green/blue) — CMY is subtractive mixing used in profile/spot fixtures, RGB is additive used in LED fixtures
-- If the input says "16-bit" or shows two channels for one function (e.g. "CH1-2 Pan"), set fine to the second channel number
-- Return ONLY valid JSON array, no markdown, no backticks, no explanation
-- Do NOT include DMX ranges, ChannelSets, or detailed value descriptions — only ch, fine, name, type
-- If channel has Pan AND Tilt, this is a moving head fixture
-- "Strobe" as a channel function within shutter = use "shutter", NOT "strobe_duration"
-- For PDFs with multiple modes (Standard/Basic/Extended), extract the FIRST mode listed with the most channels
+- CMY (cyan/magenta/yellow) = subtractive mixing in spot/profile fixtures. RGB (red/green/blue) = additive in LED fixtures
+- "16-bit" or "fine" = set the fine field to the next channel number
+- "Strobe" within a shutter channel = use "shutter" type
+- Flower Effect channels: Flower Effect = "effect", Flower Effect Red = "red", Flower Effect Green = "green", Flower Effect Blue = "blue", Flower Effect White = "white", Flower Effect Shutter = "shutter2", Flower Effect Dimmer = "dimmer2", Flower Effect colour macros = "macro"
+- Pixel effect channels: Pixel effects = "led_effect", Pixel effects speed = "led_effect_rate", Pixel effects fade = "led_effect_fade"
+- Zone-specific channels (e.g. "Red zone 1", "Red zone 2"): each zone is a SEPARATE channel with the same type
+- Individual pixel channels (e.g. "Red pixel 1" through "Red pixel 19"): each pixel is a SEPARATE channel
+- Power/Special functions / Control = "control"
+- Virtual colour wheel = "color_wheel"
+- CTC / Colour temperature correction = "cto"
+- Colour Mix control = "color_mix"
+- Return ONLY valid JSON, no markdown, no backticks
 
-Example input: "CH1-2 Pan 16bit, CH3 Dimmer, CH4 Red, CH5 Green, CH6 Blue"
-Example output: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},{"ch":3,"fine":null,"name":"Dimmer","type":"dimmer"},{"ch":4,"fine":null,"name":"Red","type":"red"},{"ch":5,"fine":null,"name":"Green","type":"green"},{"ch":6,"fine":null,"name":"Blue","type":"blue"}]`;
+For PLAIN TEXT input (not PDF), return a single mode in the modes array.`;
 
 // ── Regex pre-processor: parse common channel list formats without AI ──
 // Returns channel list array or null if it can't parse deterministically
@@ -788,7 +812,7 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
 
   // Use flash (not lite) for PDF/image since multimodal needs better model
   const model = mediaBase64 ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite';
-  const maxTokens = mediaBase64 ? 8192 : 4096;
+  const maxTokens = mediaBase64 ? 16384 : 4096;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
@@ -812,22 +836,25 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
   if (!text) throw new Error('Empty Gemini response');
   // Parse JSON — strip any markdown wrapping
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
-  const channelList = JSON.parse(text);
-  if (!Array.isArray(channelList)) throw new Error('Gemini returned non-array JSON');
-  return channelList;
+  const parsed = JSON.parse(text);
+  // Handle both formats: new { modes: [...] } or legacy [...] array
+  if (parsed.modes && Array.isArray(parsed.modes)) {
+    return parsed; // multi-mode format
+  }
+  if (Array.isArray(parsed)) {
+    return { modes: [{ name: 'Default', channelCount: parsed.length, channels: parsed }] };
+  }
+  throw new Error('Gemini returned unexpected JSON format');
 }
 
-// ── Convert Gemini JSON channel list to buildGDTFFromParsed format ──
-function buildGDTFFromChannelList(channelList, meta) {
-  // Deduplicate: if Gemini returned separate coarse+fine entries for the same function,
-  // merge them (set fine on the coarse entry, remove the fine-only entry)
+// ── Process a single mode's channel list: dedup, merge fine, zone-suffix ──
+function processChannelList(channelList) {
+  // Merge fine channels
   const merged = [];
   const seen = new Set();
   for (const ch of channelList) {
-    // Skip if this looks like a fine-only channel that was already merged
     if (ch.type && ch.type.endsWith('_fine')) continue;
     const attrKey = TYPE_TO_ATTR[ch.type] || ch.type.toUpperCase();
-    // Check if the next channel is a fine for this one (consecutive channel number)
     const fineEntry = channelList.find(f =>
       f.ch === (ch.fine || ch.ch + 1) && f !== ch &&
       (f.type === ch.type || f.type === ch.type + '_fine' || (f.name && f.name.toLowerCase().includes('fine')))
@@ -839,41 +866,54 @@ function buildGDTFFromChannelList(channelList, meta) {
       merged.push({ attribute: attrKey, coarse: ch.ch, fine });
     }
   }
-  // Make duplicate attributes unique — multi-zone fixtures (e.g. Spiider 3x RGBW)
-  // Append zone number when same attribute appears multiple times
+  // Zone-suffix duplicates
   const attrCount = {};
-  for (const ch of merged) {
-    attrCount[ch.attribute] = (attrCount[ch.attribute] || 0) + 1;
-  }
+  for (const ch of merged) attrCount[ch.attribute] = (attrCount[ch.attribute] || 0) + 1;
   const attrIndex = {};
-  const channels = merged.map(ch => {
+  return merged.map(ch => {
     if (attrCount[ch.attribute] > 1) {
       attrIndex[ch.attribute] = (attrIndex[ch.attribute] || 0) + 1;
-      // Create a unique attribute name with zone suffix
-      const suffix = attrIndex[ch.attribute];
-      return {
-        ...ch,
-        attribute: ch.attribute + '_Z' + suffix,
-        // Store original for ATTR_DB lookup
-        _originalAttr: ch.attribute,
-      };
+      return { ...ch, attribute: ch.attribute + '_Z' + attrIndex[ch.attribute] };
     }
     return ch;
   });
+}
+
+// ── Convert Gemini JSON (single or multi-mode) to GDTF ──
+function buildGDTFFromChannelList(geminiResult, meta) {
+  const modes = geminiResult.modes || [{ name: 'Default', channels: geminiResult }];
+
+  // Use the largest mode as primary if no mode specified
+  const sorted = [...modes].sort((a, b) => (b.channels?.length || 0) - (a.channels?.length || 0));
+  const primaryMode = sorted[0];
+
+  if (!primaryMode || !primaryMode.channels || primaryMode.channels.length === 0) {
+    throw new Error('No channels found in parsed result');
+  }
+
+  // Process the primary mode
+  const primaryChannels = processChannelList(primaryMode.channels);
 
   const parsed = {
-    modules: [{ name: 'Main Module', class: 'Headmover', channels }],
+    modules: [{ name: 'Main Module', class: 'Headmover', channels: primaryChannels }],
     instances: [{ moduleIndex: 0, patch: 1 }],
     grouped: { 0: [1] },
   };
 
+  // Set mode name from Gemini's detected name or channel count
   if (!meta.dmxMode) {
     let slots = 0;
-    for (const ch of channels) slots += ch.fine ? 2 : 1;
-    meta.dmxMode = slots + 'CH';
+    for (const ch of primaryChannels) slots += ch.fine ? 2 : 1;
+    meta.dmxMode = primaryMode.name || (slots + 'CH');
   }
 
-  return buildGDTFFromParsed(parsed, meta);
+  // Build primary GDTF — buildGDTFFromParsed handles multi-mode derivation
+  // But if Gemini found additional modes, we could use them in future
+  // For now, store mode info for the frontend to display
+  const xml = buildGDTFFromParsed(parsed, meta);
+
+  // Return xml + mode metadata for the frontend
+  return { xml, detectedModes: modes.map(m => ({ name: m.name, channelCount: m.channelCount || m.channels?.length || 0 })) };
 }
 
 // Build instance info string for the Gemini prompt
@@ -1293,7 +1333,10 @@ exports.handler = async function(event) {
       // Try deterministic regex parsing first (free, instant, reliable)
       let channelList = null;
       if (!mediaBase64 && userText.trim()) {
-        channelList = parseTextDeterministic(userText);
+        const regexResult = parseTextDeterministic(userText);
+        if (regexResult) {
+          channelList = { modes: [{ name: 'Default', channelCount: regexResult.length, channels: regexResult }] };
+        }
       }
 
       // Fall back to Gemini for PDFs, images, or text that regex couldn't parse
@@ -1301,7 +1344,13 @@ exports.handler = async function(event) {
         channelList = await parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
       }
       const meta = { ...body, ...extractedMeta };
-      xml = buildGDTFFromChannelList(channelList, meta);
+      const result = buildGDTFFromChannelList(channelList, meta);
+      xml = result.xml;
+      // Pass detected modes info to frontend
+      if (result.detectedModes && result.detectedModes.length > 1) {
+        // Store for response
+        body._detectedModes = result.detectedModes;
+      }
     }
 
     // Validate channel count — count only channels in the first DMXMode (primary mode)
