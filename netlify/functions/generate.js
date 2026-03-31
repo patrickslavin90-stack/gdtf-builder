@@ -805,14 +805,14 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
   const contentParts = [];
   if (mediaBase64 && mediaType) {
     contentParts.push({ inline_data: { mime_type: mediaType, data: mediaBase64 } });
-    contentParts.push({ text: 'Extract ALL DMX channels from this document. ' + (userText || '') });
+    contentParts.push({ text: 'Extract DMX channels from this document. If multiple modes exist, extract up to 4 modes (prioritize the modes shown in the main DMX table columns). Be concise — only ch, fine, name, type per channel. ' + (userText || '') });
   } else {
     contentParts.push({ text: userText });
   }
 
-  // Use flash (not lite) for PDF/image since multimodal needs better model
-  const model = mediaBase64 ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite';
-  const maxTokens = mediaBase64 ? 16384 : 4096;
+  // Use flash-lite for speed (Netlify has 26s timeout)
+  const model = 'gemini-2.5-flash-lite';
+  const maxTokens = 8192;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
