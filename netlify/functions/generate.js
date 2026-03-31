@@ -805,14 +805,14 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
   const contentParts = [];
   if (mediaBase64 && mediaType) {
     contentParts.push({ inline_data: { mime_type: mediaType, data: mediaBase64 } });
-    contentParts.push({ text: 'Extract DMX channels from this document. If multiple modes exist, extract up to 4 modes (prioritize the modes shown in the main DMX table columns). Be concise — only ch, fine, name, type per channel. ' + (userText || '') });
+    contentParts.push({ text: 'Extract DMX channels from the DMX protocol/chart table. ONLY extract channel number and function name — IGNORE colour wheel filter lists, DMX value ranges, and detailed descriptions. If the table has numbered mode columns, extract the column with the MOST channels as the primary mode, and the column with the FEWEST as a second mode. A * means skip that channel. Keep the JSON compact. ' + (userText || '') });
   } else {
     contentParts.push({ text: userText });
   }
 
-  // Use flash-lite for speed (Netlify has 26s timeout)
-  const model = 'gemini-2.5-flash-lite';
-  const maxTokens = 8192;
+  // PDF/image needs flash (better multimodal), text uses flash-lite (faster)
+  const model = mediaBase64 ? 'gemini-2.5-flash' : 'gemini-2.5-flash-lite';
+  const maxTokens = mediaBase64 ? 8192 : 4096;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
@@ -1272,6 +1272,9 @@ exports.prepareRequest = prepareRequest;
 exports.callGemini = callGemini;
 exports.postProcess = postProcess;
 exports.parseTextDeterministic = parseTextDeterministic;
+exports.buildGDTFFromParsed = buildGDTFFromParsed;
+exports.buildGDTFFromChannelList = buildGDTFFromChannelList;
+exports.TEXT_PARSE_PROMPT = TEXT_PARSE_PROMPT;
 
 // Standard Netlify Function — tries sync, falls back to async for complex fixtures
 exports.handler = async function(event) {
@@ -1328,6 +1331,22 @@ exports.handler = async function(event) {
 
       if (!userText.trim() && !mediaBase64) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'No channel data provided' }) };
+      }
+
+      // PDF/image uploads go to background function (too slow for 26s Netlify limit)
+      if (mediaBase64) {
+        try {
+          const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+          const siteUrl = process.env.URL || 'https://gdtf.netlify.app';
+          await fetch(`${siteUrl}/.netlify/functions/generate-background`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobId, ...body }),
+          });
+          return { statusCode: 200, headers, body: JSON.stringify({ jobId, status: 'processing' }) };
+        } catch(e) {
+          return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to start background processing' }) };
+        }
       }
 
       // Try deterministic regex parsing first (free, instant, reliable)
