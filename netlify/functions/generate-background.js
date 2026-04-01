@@ -2,7 +2,7 @@
 // Netlify automatically returns 202 to the caller; this runs asynchronously.
 // Used for: PDF uploads, image uploads, and complex text fixtures.
 
-const { prepareRequest, callGemini, postProcess, parseTextDeterministic } = require('./generate.js');
+const { prepareRequest } = require('./generate.js');
 
 exports.handler = async function(event) {
   let body;
@@ -35,7 +35,13 @@ exports.handler = async function(event) {
       ].filter(Boolean).join('\n\n');
 
       let mediaBase64 = null, mediaType = null;
-      if (body.pdfBase64) { mediaBase64 = body.pdfBase64; mediaType = 'application/pdf'; }
+      // Check for media stored in Blobs (from sync function)
+      if (body._mediaKey) {
+        mediaBase64 = await store.get(body._mediaKey);
+        mediaType = body._mediaType || 'application/pdf';
+        // Clean up media blob after reading
+        await store.delete(body._mediaKey).catch(() => {});
+      } else if (body.pdfBase64) { mediaBase64 = body.pdfBase64; mediaType = 'application/pdf'; }
       else if (body.imageBase64) { mediaBase64 = body.imageBase64; mediaType = 'image/jpeg'; }
 
       // Import the functions we need

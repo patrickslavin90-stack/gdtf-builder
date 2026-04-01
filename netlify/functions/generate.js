@@ -1358,19 +1358,30 @@ exports.handler = async function(event) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'No channel data provided' }) };
       }
 
-      // PDF/image uploads go to background function (too slow for 26s Netlify limit)
+      // PDF/image uploads: store media in Blobs, process in background
       if (mediaBase64) {
         try {
           const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-          const siteUrl = process.env.URL || 'https://gdtf.netlify.app';
+          const { getStore } = await import('@netlify/blobs');
+          const store = getStore('gdtf-jobs');
+
+          // Store media in blob (too large for POST body to background function)
+          await store.set('media_' + jobId, mediaBase64);
+
+          // Send lightweight request to background function (no media payload)
+          const bgBody = { ...body, jobId, _mediaKey: 'media_' + jobId, _mediaType: mediaType };
+          delete bgBody.pdfBase64;
+          delete bgBody.imageBase64;
+
+          const siteUrl = process.env.URL || 'https://gdtf-build.com';
           await fetch(`${siteUrl}/.netlify/functions/generate-background`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jobId, ...body }),
+            body: JSON.stringify(bgBody),
           });
           return { statusCode: 200, headers, body: JSON.stringify({ jobId, status: 'processing' }) };
         } catch(e) {
-          return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to start background processing' }) };
+          return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to start background processing: ' + e.message }) };
         }
       }
 
