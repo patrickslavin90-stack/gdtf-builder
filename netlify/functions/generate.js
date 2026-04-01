@@ -595,6 +595,7 @@ const TYPE_TO_ATTR = {
   color_wheel_fine: 'COLOR1', zoom_fine: 'ZOOM', focus_fine: 'FOCUS',
   cyan_fine: 'COLORSUB_C', magenta_fine: 'COLORSUB_M', yellow_fine: 'COLORSUB_Y',
   cto_fine: 'CTO', iris_fine: 'IRIS', prism_rotation: 'PRISM_POS',
+  auto_focus: 'FOCUSDISTANCE', focus_adjust: 'FOCUSDISTANCE',
 };
 
 // ── JSON-only Gemini prompt for text/PDF channel parsing ──
@@ -694,7 +695,7 @@ function parseTextDeterministic(text) {
     [/\banim|animation/i, 'animation_wheel'],
     [/\bzoom\b.*\bfine|zoom.?fine/i, null],
     [/\bzoom\b/i, 'zoom'],
-    [/\bfocus\b.*\bdist|focus.?distance/i, 'focus_distance'],
+    [/\bfocus\b.*\bdist|focus.?distance|auto.?focus/i, 'focus_distance'],
     [/\bfocus\b.*\bfine|focus.?fine/i, null],
     [/\bfocus\b.*\bmode/i, 'focus_mode'],
     [/\bfocus\b/i, 'focus'],
