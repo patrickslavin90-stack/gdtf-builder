@@ -1358,30 +1358,19 @@ exports.handler = async function(event) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'No channel data provided' }) };
       }
 
-      // PDF/image uploads: store media in Blobs, process in background
+      // PDF/image uploads: process directly (no background function)
+      // Gemini call may take 15-30s but we handle the timeout gracefully
       if (mediaBase64) {
         try {
-          const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-          const { getStore } = await import('@netlify/blobs');
-          const store = getStore('gdtf-jobs');
-
-          // Store media in blob (too large for POST body to background function)
-          await store.set('media_' + jobId, mediaBase64);
-
-          // Send lightweight request to background function (no media payload)
-          const bgBody = { ...body, jobId, _mediaKey: 'media_' + jobId, _mediaType: mediaType };
-          delete bgBody.pdfBase64;
-          delete bgBody.imageBase64;
-
-          const siteUrl = process.env.URL || 'https://gdtf-build.com';
-          await fetch(`${siteUrl}/.netlify/functions/generate-background`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(bgBody),
-          });
-          return { statusCode: 200, headers, body: JSON.stringify({ jobId, status: 'processing' }) };
+          const channelList = await parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
+          const meta = { ...body, ...extractedMeta };
+          const result = buildGDTFFromChannelList(channelList, meta);
+          xml = result.xml;
         } catch(e) {
-          return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to start background processing: ' + e.message }) };
+          // If it times out, return a helpful error instead of HTML
+          return { statusCode: 200, headers, body: JSON.stringify({
+            error: 'PDF processing took too long. Try uploading just the DMX chart pages, or type the channel list manually for instant results.',
+          })};
         }
       }
 
