@@ -1317,7 +1317,7 @@ function toggleLog() {
 
 // ── DMX Cable Animation
 const DMX_MSGS = ['PATCHING DMX','BUILDING GDTF','MAPPING CHANNELS','FIXING OFFSETS','VALIDATING XML','PACKAGING ZIP'];
-let _dmxMsgI=0,_dmxMsgTmr=null,_dmxRaf=null,_dmxRunning=false;
+let _dmxMsgI=0,_dmxMsgTmr=null,_dmxRaf=null,_dmxRunning=false,_dmxLedTmr=null;
 
 function dmxStartLoader(btn){
   if(_dmxRunning)return;_dmxRunning=true;
@@ -1338,12 +1338,19 @@ function dmxStartLoader(btn){
       document.getElementById('dmx-cr').setAttribute('width',126+e2*8);
       if(e2<1){_dmxRaf=requestAnimationFrame(p2);return;}
       clearInterval(_dmxMsgTmr);_dmxSetTxt('CONNECTED','#f59e0b');
+      // Start alternating LED blink to show activity
+      let _ledState = false;
+      _dmxLedTmr = setInterval(() => {
+        _ledState = !_ledState;
+        document.getElementById('dmx-led1').setAttribute('fill', _ledState ? '#f59e0b' : '#0d0d14');
+        document.getElementById('dmx-led2').setAttribute('fill', _ledState ? '#0d0d14' : '#f59e0b');
+      }, 600);
     });
   });
 }
 
 function dmxFinishLoader(btn){
-  clearInterval(_dmxMsgTmr);cancelAnimationFrame(_dmxRaf);
+  clearInterval(_dmxMsgTmr);clearInterval(_dmxLedTmr);cancelAnimationFrame(_dmxRaf);
   let t3=null;
   _dmxRaf=requestAnimationFrame(function p3(now){
     if(!t3)t3=now;const e3=_dmxEio(Math.min((now-t3)/700,1));
@@ -1364,6 +1371,7 @@ function dmxFinishLoader(btn){
 
 function _dmxResetAnim(full){
   if(!full)return;
+  clearInterval(_dmxLedTmr);
   document.getElementById('dmx-cr').setAttribute('width',0);
   document.getElementById('dmx-plug').setAttribute('transform','translate(0,0)');
   ['dmx-b1','dmx-b2','dmx-b3'].forEach(id=>document.getElementById(id).setAttribute('opacity',0));
