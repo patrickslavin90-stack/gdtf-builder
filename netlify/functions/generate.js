@@ -401,7 +401,7 @@ function buildModeXml(modeName, prefix, channels, pixelModuleMap) {
 }
 
 // ── Deterministic GDTF builder from parsed MA3 data (no Gemini needed) ──
-function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmxMode, fixtureType }) {
+function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmxMode, fixtureType, _overrideModes }) {
   const crypto = require('crypto');
   const guid = crypto.randomUUID().toUpperCase();
   const mfr = manufacturer || 'Unknown';
@@ -441,44 +441,48 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
   const has16bit = !hasPixels && allChannels.some(ch => ch.fine !== null && ch.fine !== undefined);
 
   // ── Determine modes to generate ──
-  const primaryPrefix = modePrefix(mode);
   const modes = []; // { modeName, prefix, channels, pixelModules (or null) }
 
-  // Primary mode — always present, all channels, all pixel instances
-  modes.push({
-    modeName: mode,
-    prefix: primaryPrefix,
-    channels: allChannels,
-    pixelModules: hasPixels ? pixelModules : null,
-  });
+  if (_overrideModes && _overrideModes.length > 1) {
+    // Multi-mode from Gemini: use real extracted modes, no derived Basic/Compact
+    const usedPrefixes = new Set();
+    for (const m of _overrideModes) {
+      let pfx = modePrefix(m.name);
+      // Deduplicate prefixes so geometry names don't collide
+      let attempt = pfx, n = 2;
+      while (usedPrefixes.has(attempt)) attempt = pfx.slice(0, 4) + n++;
+      usedPrefixes.add(attempt);
 
-  if (hasPixels) {
-    // Compact mode — main module channels only, NO pixel modules, no GeometryReferences
-    const compactChannels = allChannels.filter(ch => !ch.isPixel);
-    modes.push({
-      modeName: 'Compact',
-      prefix: 'Comp',
-      channels: compactChannels,
-      pixelModules: null,
-    });
-  } else if (has16bit) {
-    // Basic mode — drop fine channels, 8-bit only, deduplicate attributes
-    const basicSeen = new Set();
-    const basicChannels = [];
-    for (const ch of allChannels) {
-      const entry = (ch.fine !== null && ch.fine !== undefined) ? { ...ch, fine: null } : { ...ch };
-      const key = entry.gdtf + '_' + entry.geo;
-      if (!basicSeen.has(key)) {
-        basicSeen.add(key);
-        basicChannels.push(entry);
-      }
+      const modeChannels = m.channels.map(ch => {
+        const info = lookupAttr(ch.attribute);
+        if (!attrs.has(info.gdtf)) { attrs.set(info.gdtf, info); features.set(info.feature, true); }
+        return { ...info, geo: info.geo, coarse: ch.coarse, fine: ch.fine, moduleIndex: 0, isPixel: false };
+      });
+      modes.push({ modeName: m.name, prefix: attempt, channels: modeChannels, pixelModules: null });
     }
+  } else {
+    // Single parsed source — standard Primary + Basic/Compact derivation
+    const primaryPrefix = modePrefix(mode);
     modes.push({
-      modeName: 'Basic',
-      prefix: 'Basic',
-      channels: basicChannels,
-      pixelModules: null,
+      modeName: mode,
+      prefix: primaryPrefix,
+      channels: allChannels,
+      pixelModules: hasPixels ? pixelModules : null,
     });
+
+    if (hasPixels) {
+      const compactChannels = allChannels.filter(ch => !ch.isPixel);
+      modes.push({ modeName: 'Compact', prefix: 'Comp', channels: compactChannels, pixelModules: null });
+    } else if (has16bit) {
+      const basicSeen = new Set();
+      const basicChannels = [];
+      for (const ch of allChannels) {
+        const entry = (ch.fine !== null && ch.fine !== undefined) ? { ...ch, fine: null } : { ...ch };
+        const key = entry.gdtf + '_' + entry.geo;
+        if (!basicSeen.has(key)) { basicSeen.add(key); basicChannels.push(entry); }
+      }
+      modes.push({ modeName: 'Basic', prefix: 'Basic', channels: basicChannels, pixelModules: null });
+    }
   }
 
   // Build FeatureGroups
@@ -909,36 +913,43 @@ function processChannelList(channelList) {
 function buildGDTFFromChannelList(geminiResult, meta) {
   const modes = geminiResult.modes || [{ name: 'Default', channels: geminiResult }];
 
-  // Use the largest mode as primary if no mode specified
-  const sorted = [...modes].sort((a, b) => (b.channels?.length || 0) - (a.channels?.length || 0));
-  const primaryMode = sorted[0];
+  // Process all modes (not just the largest)
+  const processedModes = modes
+    .filter(m => m.channels && m.channels.length > 0)
+    .map(m => ({ name: m.name || 'Default', channels: processChannelList(m.channels) }));
 
-  if (!primaryMode || !primaryMode.channels || primaryMode.channels.length === 0) {
-    throw new Error('No channels found in parsed result');
+  if (!processedModes.length) throw new Error('No channels found in parsed result');
+
+  // Build parsed structure using union of all channels (ensures AttributeDefinitions is complete)
+  const unionSeen = new Set();
+  const unionChannels = [];
+  for (const m of processedModes) {
+    for (const ch of m.channels) {
+      const key = ch.attribute + '_' + ch.coarse;
+      if (!unionSeen.has(key)) { unionSeen.add(key); unionChannels.push(ch); }
+    }
   }
 
-  // Process the primary mode
-  const primaryChannels = processChannelList(primaryMode.channels);
-
   const parsed = {
-    modules: [{ name: 'Main Module', class: 'Headmover', channels: primaryChannels }],
+    modules: [{ name: 'Main Module', class: 'Headmover', channels: unionChannels }],
     instances: [{ moduleIndex: 0, patch: 1 }],
     grouped: { 0: [1] },
   };
 
-  // Set mode name from Gemini's detected name or channel count
+  // Set mode name from largest mode if not specified
   if (!meta.dmxMode) {
+    const largest = [...processedModes].sort((a, b) => b.channels.length - a.channels.length)[0];
     let slots = 0;
-    for (const ch of primaryChannels) slots += ch.fine ? 2 : 1;
-    meta.dmxMode = primaryMode.name || (slots + 'CH');
+    for (const ch of largest.channels) slots += ch.fine ? 2 : 1;
+    meta.dmxMode = largest.name || (slots + 'CH');
   }
 
-  // Build primary GDTF — buildGDTFFromParsed handles multi-mode derivation
-  // But if Gemini found additional modes, we could use them in future
-  // For now, store mode info for the frontend to display
-  const xml = buildGDTFFromParsed(parsed, meta);
+  // When Gemini returned multiple real modes, pass them through for multi-mode GDTF output
+  if (processedModes.length > 1) {
+    meta._overrideModes = processedModes;
+  }
 
-  // Return xml + mode metadata for the frontend
+  const xml = buildGDTFFromParsed(parsed, meta);
   return { xml, detectedModes: modes.map(m => ({ name: m.name, channelCount: m.channelCount || m.channels?.length || 0 })) };
 }
 
