@@ -1359,18 +1359,26 @@ exports.handler = async function(event) {
         return { statusCode: 400, headers, body: JSON.stringify({ error: 'No channel data provided' }) };
       }
 
-      // PDF/image uploads: process directly (no background function)
-      // Gemini call may take 15-30s but we handle the timeout gracefully
+      // PDF/image uploads: process with Gemini (with self-imposed timeout)
       if (mediaBase64) {
         try {
-          const channelList = await parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
+          // Race Gemini against a 22s timeout (Netlify kills at 26s)
+          const geminiPromise = parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('TIMEOUT')), 22000)
+          );
+          const channelList = await Promise.race([geminiPromise, timeoutPromise]);
           const meta = { ...body, ...extractedMeta };
           const result = buildGDTFFromChannelList(channelList, meta);
           xml = result.xml;
         } catch(e) {
-          // If it times out, return a helpful error instead of HTML
+          if (e.message === 'TIMEOUT') {
+            return { statusCode: 200, headers, body: JSON.stringify({
+              error: 'PDF processing timed out (large document). Try typing the channel list from the DMX chart — it generates instantly and is more reliable.',
+            })};
+          }
           return { statusCode: 200, headers, body: JSON.stringify({
-            error: 'PDF processing took too long. Try uploading just the DMX chart pages, or type the channel list manually for instant results.',
+            error: 'PDF processing failed: ' + e.message,
           })};
         }
       }
