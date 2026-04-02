@@ -628,7 +628,9 @@ HOW TO READ DMX CHARTS:
 - Channel numbers restart from 1 for each mode independently
 - "Pan Fine (16 bit)" after "Pan" → set fine to the next sequential number on the Pan entry
 
-SELF-CHECK: If there is a mode overview table listing mode names and channel counts, use those exact names. After extracting each mode, verify your channel count equals the stated ch_count. If it does not match, re-read that column — you likely missed channels on a continuation page.
+MODE NAMES: The fixture manual usually has a mode overview table (e.g. "DMX mode overview") listing each mode's name and channel count. Use those EXACT name strings as the "name" field — never substitute generic names like "Mode 1", "Mode 2". If no overview table exists, use the column header text.
+
+SELF-CHECK: After extracting each mode, verify your channel count equals the stated ch_count. If it does not match, re-read that column — you likely missed channels on a continuation page.
 
 CHANNEL TYPE KEYS (use exactly one per channel):
 pan, tilt, pan_tilt_speed,
