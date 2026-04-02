@@ -1404,6 +1404,7 @@ async function generate() {
   const btn = document.getElementById('gen-btn');
   dmxStartLoader(btn); btn.disabled = true;
   generatedXML = null;
+  const genStartTime = Date.now();
 
   try {
     // Try deterministic fix first for existing GDTF
@@ -1429,7 +1430,16 @@ async function generate() {
     }
     if (fileType === 'text' && fileContent) payload.existingXml = fileContent.includes('<GDTF') ? fileContent : null;
     if (fileType === 'text' && fileContent && !payload.existingXml) payload.channels = (channels ? channels + '\n\n' : '') + 'FILE CONTENT:\n' + fileContent.slice(0, 8000);
-    if (fileType === 'pdf' && fileContent) payload.pdfBase64 = fileContent;
+    if (fileType === 'pdf' && fileContent) {
+      if (fileContent.length > 4_000_000) {
+        // Large PDF — upload in chunks to Blobs (bypasses Netlify's 6MB request body limit)
+        const chunkResult = await uploadPDFChunked(fileContent);
+        Object.assign(payload, chunkResult);
+        setStatus('busy', 'Generating profile…');
+      } else {
+        payload.pdfBase64 = fileContent;
+      }
+    }
     if (fileType === 'image' && fileContent) payload.imageBase64 = fileContent;
 
     const res = await fetch('/api/generate', {
@@ -1494,8 +1504,23 @@ async function generate() {
       setStatus('warn', '⚠ ' + data.warnings.join(' | '));
     }
 
+    logGeneration({
+      manufacturer, fixtureName, dmxMode, fixtureType,
+      inputType: fileType, inputChannels: channels,
+      outputXml: generatedXML,
+      status: 'complete',
+      durationMs: Date.now() - genStartTime,
+      channelCount: (generatedXML.match(/<DMXChannel[\s>]/g) || []).length || null,
+    });
+
   } catch(err) {
     setStatus('err', err.message);
+    logGeneration({
+      manufacturer, fixtureName, dmxMode, fixtureType,
+      inputType: fileType, inputChannels: channels,
+      status: 'error', errorMsg: err.message,
+      durationMs: Date.now() - genStartTime,
+    });
   } finally {
     dmxFinishLoader(btn); btn.disabled = false;
   }
@@ -1675,9 +1700,48 @@ async function downloadGDTF() {
   URL.revokeObjectURL(url);
 }
 
-// ── Feedback + Supabase
+// ── Supabase
 const SUPABASE_URL = 'https://mvntodsdjftfjbcrvedn.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12bnRvZHNkamZ0ZmpiY3J2ZWRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NTYwMDQsImV4cCI6MjA4OTQzMjAwNH0.4oKeQh4E45O9Kf5MklRUmKW_5t5NvzU3cVf3VGHEIsg';
+
+function logGeneration({ manufacturer, fixtureName, dmxMode, fixtureType, inputType, inputChannels, outputXml, status, errorMsg, durationMs, channelCount }) {
+  fetch(SUPABASE_URL + '/rest/v1/gdtf_generations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON, 'Prefer': 'return=minimal' },
+    body: JSON.stringify({
+      manufacturer: manufacturer || null,
+      fixture_name: fixtureName || null,
+      dmx_mode: dmxMode || null,
+      fixture_type: fixtureType || null,
+      input_type: inputType || null,
+      input_channels: (inputChannels || '').slice(0, 5000) || null,
+      output_xml: (outputXml || '').slice(0, 50000) || null,
+      status: status || 'complete',
+      error_msg: errorMsg || null,
+      duration_ms: durationMs || null,
+      channel_count: channelCount || null,
+    }),
+  }).catch(() => {}); // fire-and-forget
+}
+
+const PDF_CHUNK_SIZE = 2_000_000; // 2MB base64 chars per chunk — keeps each request well under Netlify's 6MB limit
+
+async function uploadPDFChunked(base64) {
+  const key = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const totalChunks = Math.ceil(base64.length / PDF_CHUNK_SIZE);
+  for (let i = 0; i < totalChunks; i++) {
+    setStatus('busy', `Uploading PDF — part ${i + 1} of ${totalChunks}…`);
+    const res = await fetch('/api/store-chunk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, chunkIndex: i, chunkData: base64.slice(i * PDF_CHUNK_SIZE, (i + 1) * PDF_CHUNK_SIZE) }),
+    });
+    if (!res.ok) throw new Error(`PDF upload failed at part ${i + 1} of ${totalChunks}`);
+  }
+  return { _mediaKey: key, _totalChunks: totalChunks, _mediaType: 'application/pdf' };
+}
+
+// ── Feedback
 
 let _feedbackVote = null;
 function feedbackVote(vote) {
