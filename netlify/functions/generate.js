@@ -178,8 +178,8 @@ const ATTR_DB = {
   TILT:         { gdtf: 'Tilt',              pretty: 'Tilt',              feature: 'Position.Tilt',      physical: 'Angle',          geo: 'Head', physFrom: -135, physTo: 135, master: 'None' },
   DIM:          { gdtf: 'Dimmer',            pretty: 'Dimmer',            feature: 'Dimmer.Dimmer',      physical: 'None',           geo: 'Beam', master: 'Grand', default0: true },
   DIMMER:       { gdtf: 'Dimmer',            pretty: 'Dimmer',            feature: 'Dimmer.Dimmer',      physical: 'None',           geo: 'Beam', master: 'Grand', default0: true },
-  SHUTTER:      { gdtf: 'Shutter1',          pretty: 'Shutter',           feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam', default255: true },
-  SHUTTER2:     { gdtf: 'Shutter2',          pretty: 'Shutter 2',        feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam', default255: true },
+  SHUTTER:      { gdtf: 'Shutter1',          pretty: 'Shutter',           feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam', default0: true },
+  SHUTTER2:     { gdtf: 'Shutter2',          pretty: 'Shutter 2',        feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam', default0: true },
   COLORRGB1:    { gdtf: 'ColorAdd_R',        pretty: 'Red',              feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
   COLORRGB2:    { gdtf: 'ColorAdd_G',        pretty: 'Green',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
   COLORRGB3:    { gdtf: 'ColorAdd_B',        pretty: 'Blue',             feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
@@ -947,6 +947,19 @@ function matrixToModes(tables) {
 // ── Convert Gemini JSON (single or multi-mode) to GDTF ──
 function buildGDTFFromChannelList(geminiResult, meta) {
   const modes = geminiResult.modes || [{ name: 'Default', channels: geminiResult }];
+
+  // LED fixtures (wash, bar, strobe) use RGB additive — remap CMY types to RGB.
+  // Robe/Ayrton PDFs label channels "Red/Cyan" which Gemini reads as cyan.
+  const isAdditive = /wash|bar|strobe|led|par|pixel/i.test(meta.fixtureType || '');
+  if (isAdditive) {
+    const cmyToRgb = { cyan: 'red', magenta: 'green', yellow: 'blue', cyan_fine: 'red_fine', magenta_fine: 'green_fine', yellow_fine: 'blue_fine' };
+    for (const mode of modes) {
+      if (!mode.channels) continue;
+      for (const ch of mode.channels) {
+        if (cmyToRgb[ch.type]) ch.type = cmyToRgb[ch.type];
+      }
+    }
+  }
 
   // Process all modes (not just the largest)
   const processedModes = modes
