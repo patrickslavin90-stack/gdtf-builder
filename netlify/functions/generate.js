@@ -1320,6 +1320,22 @@ exports.handler = async function(event) {
   try { body = JSON.parse(event.body || '{}'); }
   catch { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON body' }) }; }
 
+  // Large PDF from Supabase Storage — Gemini takes 30-60s, route to background (15-min limit)
+  if (body._pdfStoragePath) {
+    try {
+      const jobId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const siteUrl = process.env.URL || 'https://gdtf-build.com';
+      await fetch(`${siteUrl}/.netlify/functions/generate-background`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId, ...body }),
+      });
+      return { statusCode: 200, headers, body: JSON.stringify({ jobId, status: 'processing' }) };
+    } catch(e) {
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to start background processing: ' + e.message }) };
+    }
+  }
+
   // If client is polling for a job result, handle that
   if (body.jobId && body.poll) {
     try {
@@ -1352,19 +1368,7 @@ exports.handler = async function(event) {
 
       // Determine if we have a PDF or image upload
       let mediaBase64 = null, mediaType = null;
-      if (body._pdfStoragePath) {
-        // Large PDF stored in Supabase Storage — fetch by public URL
-        try {
-          const pdfUrl = `https://mvntodsdjftfjbcrvedn.supabase.co/storage/v1/object/public/pdfs/${body._pdfStoragePath}`;
-          const pdfRes = await fetch(pdfUrl);
-          if (!pdfRes.ok) throw new Error(`Storage fetch failed: ${pdfRes.status}`);
-          const pdfBuffer = await pdfRes.arrayBuffer();
-          mediaBase64 = Buffer.from(pdfBuffer).toString('base64');
-          mediaType = 'application/pdf';
-        } catch (e) {
-          return { statusCode: 200, headers, body: JSON.stringify({ error: 'Failed to fetch uploaded PDF: ' + e.message }) };
-        }
-      } else if (body.pdfBase64) { mediaBase64 = body.pdfBase64; mediaType = 'application/pdf'; }
+      if (body.pdfBase64) { mediaBase64 = body.pdfBase64; mediaType = 'application/pdf'; }
       else if (body.imageBase64) { mediaBase64 = body.imageBase64; mediaType = 'image/jpeg'; }
 
       if (!userText.trim() && !mediaBase64) {
@@ -1374,8 +1378,8 @@ exports.handler = async function(event) {
       // PDF/image uploads: process with Gemini (with self-imposed timeout)
       if (mediaBase64) {
         try {
-          // Use longer timeout for large PDFs from Supabase Storage (55s of the 60s limit)
-          const timeoutMs = body._pdfStoragePath ? 55000 : 22000;
+          // Race Gemini against a 22s timeout (Netlify kills sync functions at ~26s)
+          const timeoutMs = 22000;
           const geminiPromise = parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
           const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)

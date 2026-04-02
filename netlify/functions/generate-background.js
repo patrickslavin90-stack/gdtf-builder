@@ -35,12 +35,14 @@ exports.handler = async function(event) {
       ].filter(Boolean).join('\n\n');
 
       let mediaBase64 = null, mediaType = null;
-      // Check for media stored in Blobs (from sync function)
-      if (body._mediaKey) {
-        mediaBase64 = await store.get(body._mediaKey);
-        mediaType = body._mediaType || 'application/pdf';
-        // Clean up media blob after reading
-        await store.delete(body._mediaKey).catch(() => {});
+      if (body._pdfStoragePath) {
+        // Fetch PDF from Supabase Storage (uploaded directly from browser)
+        const pdfUrl = `https://mvntodsdjftfjbcrvedn.supabase.co/storage/v1/object/public/pdfs/${body._pdfStoragePath}`;
+        const pdfRes = await fetch(pdfUrl);
+        if (!pdfRes.ok) throw new Error(`Failed to fetch PDF from storage: ${pdfRes.status}`);
+        const pdfBuffer = await pdfRes.arrayBuffer();
+        mediaBase64 = Buffer.from(pdfBuffer).toString('base64');
+        mediaType = 'application/pdf';
       } else if (body.pdfBase64) { mediaBase64 = body.pdfBase64; mediaType = 'application/pdf'; }
       else if (body.imageBase64) { mediaBase64 = body.imageBase64; mediaType = 'image/jpeg'; }
 
