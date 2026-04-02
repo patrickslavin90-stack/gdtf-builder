@@ -660,7 +660,32 @@ RULES:
 - Colour Mix control = "color_mix"
 - Return ONLY valid JSON, no markdown, no backticks
 
-For PLAIN TEXT input (not PDF), return a single mode in the modes array.`;
+For PLAIN TEXT input (not PDF), return a single mode in the modes array.
+
+For PDF/IMAGE input with multi-mode DMX tables, use TABLE MATRIX format instead:
+{
+  "tables": [
+    {
+      "modes": [{"name":"Mode 1","ch_count":49},{"name":"Mode 2","ch_count":37}],
+      "rows": [
+        ["pan","pan"],
+        ["pan_fine","pan_fine"],
+        ["tilt","tilt"],
+        ["tilt_fine","tilt_fine"],
+        ["dimmer","dimmer"],
+        ["special_channel",null]
+      ]
+    }
+  ]
+}
+
+TABLE MATRIX RULES:
+- Read ROW BY ROW — each row = one physical DMX channel row in the table
+- Each element in the row array = the TYPE KEY for that mode column, or null if * or blank
+- Fine/16-bit channels: use base type + "_fine" (e.g. "pan_fine", "tilt_fine", "dimmer_fine")
+- A NEW table begins when you see a NEW set of mode column headers (a repeated header row)
+- Each physical table is independent — extract ALL tables found in the document
+- VERIFY: count non-null entries per mode column — MUST equal ch_count. If it doesn't, re-read that column carefully.`;
 
 // ── Regex pre-processor: parse common channel list formats without AI ──
 // Returns channel list array or null if it can't parse deterministically
@@ -810,7 +835,7 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
   const contentParts = [];
   if (mediaBase64 && mediaType) {
     contentParts.push({ inline_data: { mime_type: mediaType, data: mediaBase64 } });
-    contentParts.push({ text: 'Extract DMX channels from the DMX protocol/chart table. ONLY extract channel number and function name — IGNORE colour wheel filter lists, DMX value ranges, and detailed descriptions. If the table has numbered mode columns, extract the column with the MOST channels as the primary mode, and the column with the FEWEST as a second mode. A * means skip that channel. Keep the JSON compact. ' + (userText || '') });
+    contentParts.push({ text: 'Read this DMX fixture PDF using TABLE MATRIX format. Read the channel table ROW BY ROW — do NOT read column by column. Find all independent tables (a new header row = new table). Use the type keys from the system instructions. Output {"tables":[...]}. VERIFY non-null count per mode column must match ch_count. ' + (userText || '') });
   } else {
     contentParts.push({ text: userText });
   }
@@ -842,9 +867,12 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
   // Parse JSON — strip any markdown wrapping
   text = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
   const parsed = JSON.parse(text);
-  // Handle both formats: new { modes: [...] } or legacy [...] array
+  // Handle all formats: matrix { tables: [...] }, multi-mode { modes: [...] }, legacy [...]
+  if (parsed.tables && Array.isArray(parsed.tables)) {
+    return matrixToModes(parsed.tables);
+  }
   if (parsed.modes && Array.isArray(parsed.modes)) {
-    return parsed; // multi-mode format
+    return parsed;
   }
   if (Array.isArray(parsed)) {
     return { modes: [{ name: 'Default', channelCount: parsed.length, channels: parsed }] };
@@ -907,6 +935,30 @@ function processChannelList(channelList) {
     }
     return ch;
   });
+}
+
+// ── Convert TABLE MATRIX format { tables: [...] } to standard { modes: [...] } ──
+// Each row in table.rows is an array of type-key strings (or null) — one per mode column.
+// Fine channels use the "_fine" suffix convention and are kept as flat entries;
+// processChannelList() handles fine merging via type matching.
+function matrixToModes(tables) {
+  const allModes = [];
+  for (const table of tables) {
+    const modeCount = table.modes.length;
+    for (let i = 0; i < modeCount; i++) {
+      const modeMeta = table.modes[i];
+      const channels = [];
+      let counter = 1;
+      for (const row of table.rows) {
+        if (!Array.isArray(row)) continue;
+        const cellType = row[i];
+        if (!cellType || cellType === '*') continue;
+        channels.push({ ch: counter++, name: cellType, type: cellType });
+      }
+      allModes.push({ name: modeMeta.name, channelCount: modeMeta.ch_count || channels.length, channels });
+    }
+  }
+  return { modes: allModes };
 }
 
 // ── Convert Gemini JSON (single or multi-mode) to GDTF ──
@@ -1311,6 +1363,7 @@ exports.postProcess = postProcess;
 exports.parseTextDeterministic = parseTextDeterministic;
 exports.buildGDTFFromParsed = buildGDTFFromParsed;
 exports.buildGDTFFromChannelList = buildGDTFFromChannelList;
+exports.matrixToModes = matrixToModes;
 exports.TEXT_PARSE_PROMPT = TEXT_PARSE_PROMPT;
 
 // Standard Netlify Function — tries sync, falls back to async for complex fixtures

@@ -33,7 +33,7 @@ exports.handler = async function(event) {
   if (!apiKey) return;
 
   try {
-    const { prepareRequest, buildGDTFFromParsed, buildGDTFFromChannelList, TEXT_PARSE_PROMPT } = require('./generate.js');
+    const { prepareRequest, buildGDTFFromParsed, buildGDTFFromChannelList, matrixToModes, TEXT_PARSE_PROMPT } = require('./generate.js');
     const { parsedMA3, extractedMeta } = prepareRequest(body);
     let xml;
 
@@ -61,7 +61,7 @@ exports.handler = async function(event) {
       const contentParts = [];
       if (mediaBase64 && mediaType) {
         contentParts.push({ inline_data: { mime_type: mediaType, data: mediaBase64 } });
-        contentParts.push({ text: 'Extract DMX channels from the DMX protocol/chart table. ONLY extract channel number and function name — IGNORE colour wheel filter lists, DMX value ranges. If table has numbered mode columns, read each DOWNWARD as a separate mode. * means skip. Keep JSON compact. ' + (userText || '') });
+        contentParts.push({ text: 'Read this DMX fixture PDF using TABLE MATRIX format. Read the channel table ROW BY ROW — do NOT read column by column. Find all independent tables (a new header row = new table). Use the type keys from the system instructions. Output {"tables":[...]}. VERIFY non-null count per mode column must match ch_count. ' + (userText || '') });
       } else {
         contentParts.push({ text: userText });
       }
@@ -94,7 +94,9 @@ exports.handler = async function(event) {
       const parsed = JSON.parse(text);
 
       let channelList;
-      if (parsed.modes && Array.isArray(parsed.modes)) {
+      if (parsed.tables && Array.isArray(parsed.tables)) {
+        channelList = matrixToModes(parsed.tables);
+      } else if (parsed.modes && Array.isArray(parsed.modes)) {
         channelList = parsed;
       } else if (Array.isArray(parsed)) {
         channelList = { modes: [{ name: 'Default', channelCount: parsed.length, channels: parsed }] };
