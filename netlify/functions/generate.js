@@ -605,9 +605,7 @@ const TYPE_TO_ATTR = {
 // ── JSON-only Gemini prompt for text/PDF channel parsing ──
 const TEXT_PARSE_PROMPT = `You are a DMX channel list parser for professional lighting fixtures.
 
-CRITICAL: DMX charts read DOWNWARD — each COLUMN is a separate mode, NOT a continuation.
-
-Return a JSON object (not array) with this structure:
+Return a JSON object with this structure:
 {
   "modes": [
     {
@@ -622,12 +620,15 @@ Return a JSON object (not array) with this structure:
 }
 
 HOW TO READ DMX CHARTS:
-- DMX protocol tables have NUMBERED COLUMNS for different modes (e.g. columns 1, 2, 3, 4)
-- Each column represents a SEPARATE and COMPLETE mode — read DOWN each column independently
-- A "*" or blank in a column means that channel does NOT exist in that mode — SKIP IT
-- Channel numbers in each column are independent — Mode 1 might use CH1-49, Mode 2 might use CH1-27
-- If a row shows "Pan Fine (16 bit)" as a separate row after "Pan (8 bit)", the fine channel number is the NEXT sequential number — set "fine" on the Pan entry
-- If there is a mode overview table listing mode names and channel counts, use those names and verify your channel counts match
+- DMX protocol tables have NUMBERED COLUMNS for different modes
+- Each column is a SEPARATE, COMPLETE mode — read each column fully from top to bottom
+- Tables may span multiple pages — if the same column headers appear at the top of a new page, that is a CONTINUATION of the current table, NOT a new table. Continue reading those columns from where they left off.
+- A new independent table begins only when a new SET of different mode column headers appears (e.g. modes 6-10 after modes 1-5)
+- A "*" or blank in a column means that channel does NOT exist in that mode — skip it
+- Channel numbers restart from 1 for each mode independently
+- "Pan Fine (16 bit)" after "Pan" → set fine to the next sequential number on the Pan entry
+
+SELF-CHECK: If there is a mode overview table listing mode names and channel counts, use those exact names. After extracting each mode, verify your channel count equals the stated ch_count. If it does not match, re-read that column — you likely missed channels on a continuation page.
 
 CHANNEL TYPE KEYS (use exactly one per channel):
 pan, tilt, pan_tilt_speed,
@@ -660,33 +661,7 @@ RULES:
 - Colour Mix control = "color_mix"
 - Return ONLY valid JSON, no markdown, no backticks
 
-For PLAIN TEXT input (not PDF), return a single mode in the modes array.
-
-For PDF/IMAGE input with multi-mode DMX tables, use TABLE MATRIX format instead:
-{
-  "tables": [
-    {
-      "modes": [{"name":"Mode 1","ch_count":49},{"name":"Mode 2","ch_count":37}],
-      "rows": [
-        ["pan","pan"],
-        ["pan_fine","pan_fine"],
-        ["tilt","tilt"],
-        ["tilt_fine","tilt_fine"],
-        ["dimmer","dimmer"],
-        ["special_channel",null]
-      ]
-    }
-  ]
-}
-
-TABLE MATRIX RULES:
-- Step 1: Find the mode overview (summary table listing mode names and channel counts) → populate "modes" with names and ch_count values
-- Step 2: The "rows" array must have EXACTLY max(ch_counts) entries for this table — the channel count of the largest mode. This is your row budget. Do not output more rows than this.
-- Step 3: Read the DMX channel assignment grid row by row. Each row in "rows" corresponds to one numbered DMX slot in the largest mode.
-- Each element in the row array = the TYPE KEY for that mode column, or null if * or blank
-- Fine/16-bit channels: use base type + "_fine" (e.g. "pan_fine", "tilt_fine", "dimmer_fine")
-- A NEW table begins when you see a NEW set of mode column headers (a repeated header row)
-- Each physical table is independent — extract ALL tables found in the document`;
+For PLAIN TEXT input (not PDF), return a single mode in the modes array.`;
 
 // ── Regex pre-processor: parse common channel list formats without AI ──
 // Returns channel list array or null if it can't parse deterministically
@@ -836,7 +811,7 @@ async function parseTextWithGemini(apiKey, userText, mediaBase64, mediaType) {
   const contentParts = [];
   if (mediaBase64 && mediaType) {
     contentParts.push({ inline_data: { mime_type: mediaType, data: mediaBase64 } });
-    contentParts.push({ text: 'Read this DMX fixture PDF using TABLE MATRIX format. Read the channel table ROW BY ROW — do NOT read column by column. Find all independent tables (a new header row = new table). Use the type keys from the system instructions. Output {"tables":[...]}. VERIFY non-null count per mode column must match ch_count. ' + (userText || '') });
+    contentParts.push({ text: 'Extract ALL DMX modes from this fixture manual. Read each mode column fully — tables may span multiple pages, continue reading the same columns across page breaks. A new table only starts when an entirely new set of mode column headers appears. Use the mode overview (ch_counts) to self-check each mode: if your count is wrong, re-read that column. ' + (userText || '') });
   } else {
     contentParts.push({ text: userText });
   }

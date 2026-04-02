@@ -61,7 +61,7 @@ exports.handler = async function(event) {
       const contentParts = [];
       if (mediaBase64 && mediaType) {
         contentParts.push({ inline_data: { mime_type: mediaType, data: mediaBase64 } });
-        contentParts.push({ text: 'Read this DMX fixture PDF using TABLE MATRIX format (see system instructions). For each table: (1) find the mode overview to get ch_counts, (2) output EXACTLY max(ch_counts) rows — no more, (3) each row is an array of type keys across mode columns (null if absent). New header row = new table. ' + (userText || '') });
+        contentParts.push({ text: 'Extract ALL DMX modes from this fixture manual. Read each mode column fully — tables may span multiple pages, continue reading the same columns across page breaks. A new table only starts when an entirely new set of mode column headers appears. Use the mode overview (ch_counts) to self-check each mode: if your count is wrong, re-read that column. ' + (userText || '') });
       } else {
         contentParts.push({ text: userText });
       }
