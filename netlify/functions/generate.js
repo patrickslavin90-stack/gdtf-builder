@@ -1336,15 +1336,25 @@ exports.handler = async function(event) {
     }
   }
 
-  // If client is polling for a job result, handle that
+  // If client is polling for a job result, read from Supabase gdtf_jobs table
   if (body.jobId && body.poll) {
     try {
-      const { getStore } = await import('@netlify/blobs');
-      const store = getStore({ name: 'gdtf-jobs', consistency: 'strong' });
-      const result = await store.get(body.jobId, { type: 'json' });
-      if (!result) return { statusCode: 200, headers, body: JSON.stringify({ status: 'processing' }) };
-      await store.delete(body.jobId); // clean up
-      return { statusCode: 200, headers, body: JSON.stringify(result) };
+      const supabaseUrl = 'https://mvntodsdjftfjbcrvedn.supabase.co';
+      const supabaseAnon = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im12bnRvZHNkamZ0ZmpiY3J2ZWRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NTYwMDQsImV4cCI6MjA4OTQzMjAwNH0.4oKeQh4E45O9Kf5MklRUmKW_5t5NvzU3cVf3VGHEIsg';
+      const pollRes = await fetch(
+        `${supabaseUrl}/rest/v1/gdtf_jobs?job_id=eq.${encodeURIComponent(body.jobId)}&select=status,xml,error_msg&limit=1`,
+        { headers: { 'apikey': supabaseAnon, 'Authorization': `Bearer ${supabaseAnon}` } }
+      );
+      const rows = await pollRes.json();
+      if (!rows.length) return { statusCode: 200, headers, body: JSON.stringify({ status: 'processing' }) };
+      const row = rows[0];
+      // Clean up job row after reading
+      fetch(`${supabaseUrl}/rest/v1/gdtf_jobs?job_id=eq.${encodeURIComponent(body.jobId)}`, {
+        method: 'DELETE',
+        headers: { 'apikey': supabaseAnon, 'Authorization': `Bearer ${supabaseAnon}` },
+      }).catch(() => {});
+      if (row.status === 'error') return { statusCode: 200, headers, body: JSON.stringify({ status: 'error', error: row.error_msg }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ status: 'complete', xml: row.xml }) };
     } catch(e) {
       return { statusCode: 200, headers, body: JSON.stringify({ status: 'processing' }) };
     }
