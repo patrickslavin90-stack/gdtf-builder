@@ -1459,10 +1459,10 @@ async function generate() {
     if (data.jobId && data.status === 'processing') {
       setStatus('busy', 'Complex fixture detected — generating in background…');
       let attempts = 0;
-      while (attempts < 60) { // poll for up to 2 minutes
+      while (attempts < 100) { // poll for up to 5 minutes
         await new Promise(r => setTimeout(r, 3000));
         attempts++;
-        setStatus('busy', `Generating… (${attempts * 3}s)`);
+        setStatus('busy', `Generating… (${attempts * 3}s — complex PDFs can take up to 5 min)`);
         const pollRes = await fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
