@@ -8,9 +8,6 @@
 [functions."generate"]
   timeout = 60
 
-[functions."store-chunk"]
-  timeout = 10
-
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"

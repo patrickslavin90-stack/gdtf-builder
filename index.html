@@ -927,7 +927,7 @@ footer a:hover { color: var(--amber); }
 
 <script>
 // ── State
-let fileContent = null, fileType = null, fileName = null, fileLoading = false;
+let fileContent = null, fileType = null, fileName = null, fileLoading = false, rawFile = null;
 let generatedXML = null, generatedName = 'fixture';
 
 // ── Init
@@ -977,6 +977,7 @@ function handleFile(file) {
     r.readAsDataURL(file);
   } else if (ext === 'pdf') {
     fileType = 'pdf';
+    rawFile = file;
     const r = new FileReader();
     r.onload = e => fileContent = e.target.result.split(',')[1];
     r.readAsDataURL(file);
@@ -1431,10 +1432,9 @@ async function generate() {
     if (fileType === 'text' && fileContent) payload.existingXml = fileContent.includes('<GDTF') ? fileContent : null;
     if (fileType === 'text' && fileContent && !payload.existingXml) payload.channels = (channels ? channels + '\n\n' : '') + 'FILE CONTENT:\n' + fileContent.slice(0, 8000);
     if (fileType === 'pdf' && fileContent) {
-      if (fileContent.length > 4_000_000) {
-        // Large PDF — upload in chunks to Blobs (bypasses Netlify's 6MB request body limit)
-        const chunkResult = await uploadPDFChunked(fileContent);
-        Object.assign(payload, chunkResult);
+      if (rawFile && rawFile.size > 3_000_000) {
+        // Large PDF — upload directly to Supabase Storage (bypasses Netlify's 6MB request body limit)
+        payload._pdfStoragePath = await uploadPDFToStorage(rawFile);
         setStatus('busy', 'Generating profile…');
       } else {
         payload.pdfBase64 = fileContent;
@@ -1724,21 +1724,19 @@ function logGeneration({ manufacturer, fixtureName, dmxMode, fixtureType, inputT
   }).catch(() => {}); // fire-and-forget
 }
 
-const PDF_CHUNK_SIZE = 2_000_000; // 2MB base64 chars per chunk — keeps each request well under Netlify's 6MB limit
-
-async function uploadPDFChunked(base64) {
-  const key = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  const totalChunks = Math.ceil(base64.length / PDF_CHUNK_SIZE);
-  for (let i = 0; i < totalChunks; i++) {
-    setStatus('busy', `Uploading PDF — part ${i + 1} of ${totalChunks}…`);
-    const res = await fetch('/api/store-chunk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key, chunkIndex: i, chunkData: base64.slice(i * PDF_CHUNK_SIZE, (i + 1) * PDF_CHUNK_SIZE) }),
-    });
-    if (!res.ok) throw new Error(`PDF upload failed at part ${i + 1} of ${totalChunks}`);
+async function uploadPDFToStorage(file) {
+  setStatus('busy', 'Uploading PDF…');
+  const key = Date.now().toString(36) + Math.random().toString(36).slice(2, 8) + '.pdf';
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/pdfs/${key}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/pdf', 'Authorization': `Bearer ${SUPABASE_ANON}` },
+    body: file,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error('PDF upload failed: ' + (err.message || res.status));
   }
-  return { _mediaKey: key, _totalChunks: totalChunks, _mediaType: 'application/pdf' };
+  return key;
 }
 
 // ── Feedback

@@ -1352,26 +1352,17 @@ exports.handler = async function(event) {
 
       // Determine if we have a PDF or image upload
       let mediaBase64 = null, mediaType = null;
-      if (body._mediaKey) {
-        // Large PDF uploaded in chunks — reassemble from Blobs
+      if (body._pdfStoragePath) {
+        // Large PDF stored in Supabase Storage — fetch by public URL
         try {
-          const { getStore } = await import('@netlify/blobs');
-          const store = getStore('gdtf-media');
-          const totalChunks = body._totalChunks || 1;
-          const parts = [];
-          for (let i = 0; i < totalChunks; i++) {
-            const chunk = await store.get(`chunk_${body._mediaKey}_${i}`);
-            if (!chunk) throw new Error(`Missing chunk ${i}`);
-            parts.push(chunk);
-          }
-          mediaBase64 = parts.join('');
-          mediaType = body._mediaType || 'application/pdf';
-          // Clean up chunks (fire-and-forget)
-          for (let i = 0; i < totalChunks; i++) {
-            store.delete(`chunk_${body._mediaKey}_${i}`).catch(() => {});
-          }
+          const pdfUrl = `https://mvntodsdjftfjbcrvedn.supabase.co/storage/v1/object/public/pdfs/${body._pdfStoragePath}`;
+          const pdfRes = await fetch(pdfUrl);
+          if (!pdfRes.ok) throw new Error(`Storage fetch failed: ${pdfRes.status}`);
+          const pdfBuffer = await pdfRes.arrayBuffer();
+          mediaBase64 = Buffer.from(pdfBuffer).toString('base64');
+          mediaType = 'application/pdf';
         } catch (e) {
-          return { statusCode: 200, headers, body: JSON.stringify({ error: 'Failed to read uploaded PDF: ' + e.message }) };
+          return { statusCode: 200, headers, body: JSON.stringify({ error: 'Failed to fetch uploaded PDF: ' + e.message }) };
         }
       } else if (body.pdfBase64) { mediaBase64 = body.pdfBase64; mediaType = 'application/pdf'; }
       else if (body.imageBase64) { mediaBase64 = body.imageBase64; mediaType = 'image/jpeg'; }
@@ -1383,8 +1374,8 @@ exports.handler = async function(event) {
       // PDF/image uploads: process with Gemini (with self-imposed timeout)
       if (mediaBase64) {
         try {
-          // Use longer timeout for large PDFs reassembled from Blobs (55s of the 60s limit)
-          const timeoutMs = body._mediaKey ? 55000 : 22000;
+          // Use longer timeout for large PDFs from Supabase Storage (55s of the 60s limit)
+          const timeoutMs = body._pdfStoragePath ? 55000 : 22000;
           const geminiPromise = parseTextWithGemini(apiKey, userText || 'Extract all DMX channels from this document', mediaBase64, mediaType);
           const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
