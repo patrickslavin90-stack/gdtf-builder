@@ -680,7 +680,7 @@ For PDF/IMAGE input with multi-mode DMX tables, use TABLE MATRIX format instead:
 }
 
 TABLE MATRIX RULES:
-- Read ROW BY ROW — each row = one physical DMX channel row in the table
+- ONE ROW PER DMX CHANNEL SLOT — only rows from the DMX channel assignment table (the numbered grid with mode columns). Skip titles, descriptions, colour wheel filter lists, notes, page headers, and any other non-channel content.
 - Each element in the row array = the TYPE KEY for that mode column, or null if * or blank
 - Fine/16-bit channels: use base type + "_fine" (e.g. "pan_fine", "tilt_fine", "dimmer_fine")
 - A NEW table begins when you see a NEW set of mode column headers (a repeated header row)

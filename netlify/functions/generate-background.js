@@ -61,7 +61,7 @@ exports.handler = async function(event) {
       const contentParts = [];
       if (mediaBase64 && mediaType) {
         contentParts.push({ inline_data: { mime_type: mediaType, data: mediaBase64 } });
-        contentParts.push({ text: 'Read this DMX fixture PDF using TABLE MATRIX format. Read the channel table ROW BY ROW — do NOT read column by column. Find all independent tables (a new header row = new table). Use the type keys from the system instructions. Output {"tables":[...]}. VERIFY non-null count per mode column must match ch_count. ' + (userText || '') });
+        contentParts.push({ text: 'Read this DMX fixture PDF using TABLE MATRIX format. From the DMX channel assignment table ONLY (skip all other content): one row per DMX channel slot, each row is an array of type keys across mode columns. Find all independent tables (new header row = new table). Use type keys from system instructions. Output {"tables":[...]}. VERIFY non-null count per mode column must match ch_count. ' + (userText || '') });
       } else {
         contentParts.push({ text: userText });
       }
@@ -75,7 +75,7 @@ exports.handler = async function(event) {
           body: JSON.stringify({
             system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
             contents: [{ parts: contentParts }],
-            generationConfig: { maxOutputTokens: 32768, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+            generationConfig: { maxOutputTokens: 65536, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
           }),
         }
       );
