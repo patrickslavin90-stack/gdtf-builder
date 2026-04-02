@@ -101,6 +101,39 @@ async function run() {
     process.exit(1);
   }
 
+  // Helper: re-extract a single failing mode
+  async function reExtractMode(mode) {
+    const statedCount = mode.channelCount || 0;
+    const reRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
+          contents: [{ parts: [
+            { inline_data: { mime_type: 'application/pdf', data: mediaBase64 } },
+            { text: `Extract ONLY the channels for the DMX mode named "${mode.name}" from this fixture manual. This mode occupies ${statedCount} raw DMX slots (1 through ${statedCount}). Read ONLY that mode's column from top to bottom — do not copy assignments from any other mode. For 16-bit pairs, set "fine" on the coarse entry only (do NOT include a separate fine object). Return a JSON array of logical channel objects: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},...]` },
+          ]}],
+          generationConfig: { maxOutputTokens: 8192, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+        }),
+      }
+    );
+    if (!reRes.ok) return null;
+    const reData = await reRes.json();
+    const reParts = reData.candidates?.[0]?.content?.parts || [];
+    let reText = '';
+    for (const p of reParts) { if (!p.thought) reText += (p.text || ''); }
+    reText = reText.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+    try {
+      const reParsed = JSON.parse(reText);
+      const reChannels = Array.isArray(reParsed) ? reParsed : (reParsed.modes?.[0]?.channels || reParsed.channels || null);
+      console.log(`    re-extracted ${reChannels?.length || 0} channels, types: ${[...new Set((reChannels||[]).map(c=>c.type))].slice(0,8).join(',')}`);
+      if (reChannels && reChannels.length > 0) return reChannels;
+    } catch (e) { console.log(`    JSON parse failed: ${e.message}, text: ${reText.slice(0,100)}`); }
+    return null;
+  }
+
   // Normalise to { modes: [...] }
   let result;
   if (parsed.tables && Array.isArray(parsed.tables)) {
@@ -115,6 +148,25 @@ async function run() {
   } else {
     console.error('\nUnexpected JSON format:', Object.keys(parsed));
     process.exit(1);
+  }
+
+  // Validate modes and re-extract any missing dimmer
+  for (let i = 0; i < result.modes.length; i++) {
+    const mode = result.modes[i];
+    const types = (mode.channels || []).map(c => c.type);
+    const hasDimmer = types.includes('dimmer');
+    if (!hasDimmer && (mode.channels || []).length > 10) {
+      console.log(`\n  → Mode "${mode.name}" missing dimmer — re-extracting...`);
+      const fixed = await reExtractMode(mode);
+      if (fixed) {
+        result.modes[i] = { ...mode, channels: fixed };
+        const types = fixed.map(c=>c.type);
+        console.log(`  ✓ Re-extracted ${fixed.length} logical channels, dim=${types.includes('dimmer')}, shutter=${types.includes('shutter')}, zoom=${types.includes('zoom')}`);
+        fixed.slice(-4).forEach(c => console.log(`    ...ch${c.ch}${c.fine?'+'+c.fine:''} ${c.type} (${c.name})`));
+      } else {
+        console.log(`  ✗ Re-extraction returned nothing`);
+      }
+    }
   }
 
   // Print mode summary

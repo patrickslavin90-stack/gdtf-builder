@@ -110,6 +110,51 @@ exports.handler = async function(event) {
         throw new Error('Unexpected JSON format from Gemini');
       }
 
+      // Re-extract any mode that is missing dimmer (critical attribute) or has wrong channel count.
+      // A focused single-mode call is far more reliable than reading 10 columns simultaneously.
+      if (mediaBase64 && mediaType && channelList.modes && channelList.modes.length > 1) {
+        for (let i = 0; i < channelList.modes.length; i++) {
+          const mode = channelList.modes[i];
+          const types = (mode.channels || []).map(c => c.type);
+          const hasDimmer = types.includes('dimmer');
+          const rawSlots = (mode.channels || []).reduce((n, c) => n + (c.fine ? 2 : 1), 0);
+          const statedCount = mode.channelCount || 0;
+          const countWrong = statedCount > 0 && Math.abs(rawSlots - statedCount) > 2;
+          if (!hasDimmer && (mode.channels || []).length > 10 || countWrong) {
+            // Targeted re-extraction for this mode only
+            const reRes = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
+                  contents: [{ parts: [
+                    { inline_data: { mime_type: mediaType, data: mediaBase64 } },
+                    { text: `Extract ONLY the channels for the DMX mode named "${mode.name}" from this fixture manual. This mode occupies ${statedCount} raw DMX slots (1 through ${statedCount}). Read ONLY that mode's column from top to bottom — do not copy assignments from any other mode. For 16-bit pairs, set "fine" on the coarse entry only (do NOT include a separate fine object). Return a JSON array of logical channel objects: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},...]` },
+                  ]}],
+                  generationConfig: { maxOutputTokens: 8192, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+                }),
+              }
+            );
+            if (reRes.ok) {
+              const reData = await reRes.json();
+              const reParts = reData.candidates?.[0]?.content?.parts || [];
+              let reText = '';
+              for (const p of reParts) { if (!p.thought) reText += (p.text || ''); }
+              reText = reText.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+              try {
+                const reParsed = JSON.parse(reText);
+                const reChannels = Array.isArray(reParsed) ? reParsed : (reParsed.modes?.[0]?.channels || reParsed.channels || null);
+                if (reChannels && reChannels.length > 0) {
+                  channelList.modes[i] = { ...mode, channels: reChannels };
+                }
+              } catch (_) { /* keep original if re-extraction fails */ }
+            }
+          }
+        }
+      }
+
       const meta = { ...body, ...extractedMeta };
       const result = buildGDTFFromChannelList(channelList, meta);
       xml = result.xml;
