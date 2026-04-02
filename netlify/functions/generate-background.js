@@ -75,7 +75,7 @@ exports.handler = async function(event) {
           body: JSON.stringify({
             system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
             contents: [{ parts: contentParts }],
-            generationConfig: { maxOutputTokens: 16384, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+            generationConfig: { maxOutputTokens: 32768, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
           }),
         }
       );
@@ -90,8 +90,14 @@ exports.handler = async function(event) {
       let text = '';
       for (const part of parts) { if (!part.thought) text += (part.text || ''); }
       if (!text) throw new Error('Empty Gemini response');
+      const finishReason = data.candidates?.[0]?.finishReason;
       text = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
-      const parsed = JSON.parse(text);
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) {
+        throw new Error(`JSON parse failed (${e.message}) finishReason=${finishReason} len=${text.length} preview=${text.slice(0, 300)}`);
+      }
 
       let channelList;
       if (parsed.tables && Array.isArray(parsed.tables)) {
