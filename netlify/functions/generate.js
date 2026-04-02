@@ -680,12 +680,13 @@ For PDF/IMAGE input with multi-mode DMX tables, use TABLE MATRIX format instead:
 }
 
 TABLE MATRIX RULES:
-- ONE ROW PER DMX CHANNEL SLOT — only rows from the DMX channel assignment table (the numbered grid with mode columns). Skip titles, descriptions, colour wheel filter lists, notes, page headers, and any other non-channel content.
+- Step 1: Find the mode overview (summary table listing mode names and channel counts) → populate "modes" with names and ch_count values
+- Step 2: The "rows" array must have EXACTLY max(ch_counts) entries for this table — the channel count of the largest mode. This is your row budget. Do not output more rows than this.
+- Step 3: Read the DMX channel assignment grid row by row. Each row in "rows" corresponds to one numbered DMX slot in the largest mode.
 - Each element in the row array = the TYPE KEY for that mode column, or null if * or blank
 - Fine/16-bit channels: use base type + "_fine" (e.g. "pan_fine", "tilt_fine", "dimmer_fine")
 - A NEW table begins when you see a NEW set of mode column headers (a repeated header row)
-- Each physical table is independent — extract ALL tables found in the document
-- VERIFY: count non-null entries per mode column — MUST equal ch_count. If it doesn't, re-read that column carefully.`;
+- Each physical table is independent — extract ALL tables found in the document`;
 
 // ── Regex pre-processor: parse common channel list formats without AI ──
 // Returns channel list array or null if it can't parse deterministically
