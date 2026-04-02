@@ -75,7 +75,7 @@ exports.handler = async function(event) {
           body: JSON.stringify({
             system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
             contents: [{ parts: contentParts }],
-            generationConfig: { maxOutputTokens: 8192, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
+            generationConfig: { maxOutputTokens: 32768, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
           }),
         }
       );
