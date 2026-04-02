@@ -119,8 +119,8 @@ exports.handler = async function(event) {
           const hasDimmer = types.includes('dimmer');
           const rawSlots = (mode.channels || []).reduce((n, c) => n + (c.fine ? 2 : 1), 0);
           const statedCount = mode.channelCount || 0;
-          const countWrong = statedCount > 0 && Math.abs(rawSlots - statedCount) > 2;
-          if (!hasDimmer && (mode.channels || []).length > 10 || countWrong) {
+          const countWrong = statedCount > 0 && rawSlots < statedCount * 0.7; // >30% missing
+          if ((!hasDimmer && (mode.channels || []).length > 10) || countWrong) {
             // Targeted re-extraction for this mode only
             const reRes = await fetch(
               `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
@@ -128,10 +128,10 @@ exports.handler = async function(event) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT }] },
+                  system_instruction: { parts: [{ text: TEXT_PARSE_PROMPT + `\n\nYou MUST read the actual channel number from THIS mode's column cell. The SAME function has DIFFERENT channel numbers in different modes — for example, "CTC" is ch32 in Mode 1 but ch16 in Mode 3, and "Dimmer" is ch48 in Mode 1 but ch32 in Mode 3. NEVER copy Mode 1's channel numbers to other modes.` }] },
                   contents: [{ parts: [
                     { inline_data: { mime_type: mediaType, data: mediaBase64 } },
-                    { text: `Extract ONLY the channels for the DMX mode named "${mode.name}" from this fixture manual. This mode occupies ${statedCount} raw DMX slots (1 through ${statedCount}). Read ONLY that mode's column from top to bottom — do not copy assignments from any other mode. For 16-bit pairs, set "fine" on the coarse entry only (do NOT include a separate fine object). Return a JSON array of logical channel objects: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},...]` },
+                    { text: `Extract ONLY the channels for "${mode.name}" (${statedCount} DMX slots, ch1-${statedCount}). Read ONLY this mode's column. For 16-bit pairs, set "fine" on the coarse entry (no separate fine object). Return JSON array: [{"ch":1,"fine":2,"name":"Pan","type":"pan"},...]` },
                   ]}],
                   generationConfig: { maxOutputTokens: 8192, temperature: 0.0, responseMimeType: 'application/json', thinkingConfig: { thinkingBudget: 0 } },
                 }),
