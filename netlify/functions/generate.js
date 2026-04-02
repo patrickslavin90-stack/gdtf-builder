@@ -630,6 +630,8 @@ HOW TO READ DMX CHARTS:
 
 MODE NAMES: The fixture manual usually has a mode overview table (e.g. "DMX mode overview") listing each mode's name and channel count. Use those EXACT name strings as the "name" field — never substitute generic names like "Mode 1", "Mode 2". If no overview table exists, use the column header text.
 
+CRITICAL — CHANNEL NUMBERS ARE INDEPENDENT PER MODE: Mode 3 ch32 is NOT necessarily the same function as Mode 1 ch32. For each mode column, read the channel number and function name DIRECTLY from that column's cells. Never infer a channel's function by copying from another mode's assignment at the same channel number.
+
 SELF-CHECK: After extracting each mode, verify your channel count equals the stated ch_count. If it does not match, re-read that column — you likely missed channels on a continuation page.
 
 CHANNEL TYPE KEYS (use exactly one per channel):
