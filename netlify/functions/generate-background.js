@@ -119,7 +119,7 @@ exports.handler = async function(event) {
           const hasDimmer = types.includes('dimmer');
           const rawSlots = (mode.channels || []).reduce((n, c) => n + (c.fine ? 2 : 1), 0);
           const statedCount = mode.channelCount || 0;
-          const countWrong = statedCount > 0 && rawSlots < statedCount * 0.7; // >30% missing
+          const countWrong = statedCount > 0 && rawSlots < statedCount * 0.9; // >10% missing
           if ((!hasDimmer && (mode.channels || []).length > 10) || countWrong) {
             // Targeted re-extraction for this mode only
             const reRes = await fetch(

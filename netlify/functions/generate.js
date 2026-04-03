@@ -971,6 +971,29 @@ function buildGDTFFromChannelList(geminiResult, meta) {
     }
   }
 
+  // Post-process: if stated channelCount exceeds raw slot count, check if Pan/Tilt
+  // should have fine channels (common in "reduced" modes that still have 16-bit P/T)
+  for (const mode of modes) {
+    if (!mode.channels || !mode.channelCount) continue;
+    const rawSlots = mode.channels.reduce((n, c) => n + (c.fine ? 2 : 1), 0);
+    if (rawSlots < mode.channelCount) {
+      const gap = mode.channelCount - rawSlots;
+      let added = 0;
+      for (const ch of mode.channels) {
+        if (added >= gap) break;
+        if ((ch.type === 'pan' || ch.type === 'tilt') && !ch.fine) {
+          // Shift all subsequent channel numbers up by 1 to make room for fine
+          const fineNum = ch.ch + 1;
+          for (const other of mode.channels) {
+            if (other !== ch && other.ch >= fineNum) { other.ch++; if (other.fine) other.fine++; }
+          }
+          ch.fine = fineNum;
+          added++;
+        }
+      }
+    }
+  }
+
   // Process all modes (not just the largest)
   const processedModes = modes
     .filter(m => m.channels && m.channels.length > 0)
