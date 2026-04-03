@@ -378,15 +378,13 @@ function buildModeXml(modeName, prefix, channels, pixelModuleMap) {
   let xml = `      <DMXMode Name="${modeName}" Geometry="${prefix} Base" Description="">\n`;
   xml += `        <DMXChannels>\n`;
 
-  // Main (non-pixel) channels — recalculate offsets sequentially
-  let seqOffset = 1;
+  // Main (non-pixel) channels — use Gemini's channel numbers as DMX offsets when available
   for (const ch of channels) {
     if (ch.isPixel) continue;
     const res = ch.fine ? '2' : '1';
-    const offset = ch.fine ? `${seqOffset},${seqOffset + 1}` : `${seqOffset}`;
+    const offset = ch.fine ? `${ch.coarse},${ch.fine}` : `${ch.coarse}`;
     const geoName = prefixGeo(prefix, ch.geo);
     xml += buildDMXChannelXml(ch, geoName, res, offset);
-    seqOffset += ch.fine ? 2 : 1;
   }
 
   // Pixel template channels — grouped by module, each with its own template geometry
