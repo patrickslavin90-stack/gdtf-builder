@@ -174,12 +174,12 @@ function parseMA3Xml(xml) {
 
 // ── MA3 → GDTF attribute mapping with full metadata ──
 const ATTR_DB = {
-  PAN:          { gdtf: 'Pan',               pretty: 'Pan',               feature: 'Position.Pan',       physical: 'Angle',          geo: 'Yoke', physFrom: -270, physTo: 270, master: 'None' },
-  TILT:         { gdtf: 'Tilt',              pretty: 'Tilt',              feature: 'Position.Tilt',      physical: 'Angle',          geo: 'Head', physFrom: -135, physTo: 135, master: 'None' },
+  PAN:          { gdtf: 'Pan',               pretty: 'Pan',               feature: 'Position.Pan',       physical: 'Angle',          geo: 'Yoke', physFrom: -270, physTo: 270, master: 'None', defaultVal: 90 },
+  TILT:         { gdtf: 'Tilt',              pretty: 'Tilt',              feature: 'Position.Tilt',      physical: 'Angle',          geo: 'Head', physFrom: -135, physTo: 135, master: 'None', default0: true },
   DIM:          { gdtf: 'Dimmer',            pretty: 'Dimmer',            feature: 'Dimmer.Dimmer',      physical: 'None',           geo: 'Beam', master: 'Grand', default0: true },
   DIMMER:       { gdtf: 'Dimmer',            pretty: 'Dimmer',            feature: 'Dimmer.Dimmer',      physical: 'None',           geo: 'Beam', master: 'Grand', default0: true },
-  SHUTTER:      { gdtf: 'Shutter1',          pretty: 'Shutter',           feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam', default0: true },
-  SHUTTER2:     { gdtf: 'Shutter2',          pretty: 'Shutter 2',        feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam', default0: true },
+  SHUTTER:      { gdtf: 'Shutter1',          pretty: 'Shutter',           feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam', defaultVal: 100 },
+  SHUTTER2:     { gdtf: 'Shutter2',          pretty: 'Shutter 2',        feature: 'Shutter.Shutter',    physical: 'None',           geo: 'Beam', defaultVal: 100 },
   COLORRGB1:    { gdtf: 'ColorAdd_R',        pretty: 'Red',              feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
   COLORRGB2:    { gdtf: 'ColorAdd_G',        pretty: 'Green',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
   COLORRGB3:    { gdtf: 'ColorAdd_B',        pretty: 'Blue',             feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
@@ -349,7 +349,7 @@ function buildGeoTree(prefix, pixelModules, beamType) {
 
 // ── Build DMXChannel XML for a single channel ──
 function buildDMXChannelXml(ch, geoName, resolution, offsetStr) {
-  const defVal = ch.default0 ? '0' : (ch.default255 ? '255' : '0');
+  const defVal = ch.defaultVal !== undefined ? String(ch.defaultVal) : (ch.default0 ? '0' : (ch.default255 ? '255' : '0'));
   const master = ch.master || 'None';
   let physAttrs = '';
   if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
