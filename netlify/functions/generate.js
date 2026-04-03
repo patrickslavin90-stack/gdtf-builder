@@ -353,7 +353,7 @@ function buildDMXChannelXml(ch, geoName, resolution, offsetStr) {
   // 0 stays 0, 255 becomes max for resolution (65535 for 16-bit), 128 becomes midpoint
   const defVal8 = ch.defaultVal !== undefined ? ch.defaultVal : (ch.default0 ? 0 : (ch.default255 ? 255 : 0));
   const maxForRes = Math.pow(256, resolution) - 1; // res=1→255, res=2→65535
-  const defVal = defVal8 === 0 ? '0' : defVal8 === 255 ? String(maxForRes) : defVal8 === 128 ? String(Math.floor(maxForRes / 2) + 1) : String(Math.round(defVal8 / 255 * maxForRes));
+  const defVal = defVal8 === 0 ? '0' : defVal8 === 255 ? String(maxForRes) : defVal8 === 128 ? String(Math.ceil(maxForRes / 2)) : String(Math.round(defVal8 / 255 * maxForRes));
   const master = ch.master || 'None';
   let physAttrs = '';
   if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
