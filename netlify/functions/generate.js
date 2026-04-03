@@ -349,18 +349,19 @@ function buildGeoTree(prefix, pixelModules, beamType) {
 
 // ── Build DMXChannel XML for a single channel ──
 function buildDMXChannelXml(ch, geoName, resolution, offsetStr) {
-  // Default values: scale 8-bit value to match resolution denominator
-  // 0 stays 0, 255 becomes max for resolution (65535 for 16-bit), 128 becomes midpoint
+  // Default values scaled to channel resolution
   const defVal8 = ch.defaultVal !== undefined ? ch.defaultVal : (ch.default0 ? 0 : (ch.default255 ? 255 : 0));
-  const maxForRes = Math.pow(256, resolution) - 1; // res=1→255, res=2→65535
-  const defVal = defVal8 === 0 ? '0' : defVal8 === 255 ? String(maxForRes) : defVal8 === 128 ? String(Math.ceil(maxForRes / 2)) : String(Math.round(defVal8 / 255 * maxForRes));
+  let defStr;
+  if (defVal8 === 0) { defStr = `0/${resolution}`; }
+  else if (resolution <= 1) { defStr = `${defVal8}/1`; }
+  else { defStr = `${defVal8 * 65536 + defVal8}/4`; } // MA3 dec24 format: V*65536+V (e.g. 128→8388736)
   const master = ch.master || 'None';
   let physAttrs = '';
   if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
 
   return `          <DMXChannel DMXBreak="1" Offset="${offsetStr}" Geometry="${geoName}" InitialFunction="${geoName}_${ch.gdtf}.${ch.gdtf}.${ch.pretty} 1">
             <LogicalChannel Attribute="${ch.gdtf}" Master="${master}">
-              <ChannelFunction Name="${ch.pretty} 1" Attribute="${ch.gdtf}" DMXFrom="0/${resolution}" Default="${defVal}/${resolution}"${physAttrs} CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000"/>
+              <ChannelFunction Name="${ch.pretty} 1" Attribute="${ch.gdtf}" DMXFrom="0/${resolution}" Default="${defStr}"${physAttrs} CustomName="" Max="1.000000" Min="0.000000" RealAcceleration="0.000000"/>
             </LogicalChannel>
           </DMXChannel>\n`;
 }
