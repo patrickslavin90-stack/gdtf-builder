@@ -896,10 +896,12 @@ function processChannelList(channelList) {
         (f.name && f.name.toLowerCase().includes('fine')));
       fine = nextCh ? ch.ch + 1 : null; // only use if next is explicitly fine
     } else {
-      // No fine specified — check if next channel is a fine for this one
+      // No fine specified — check if next channel is explicitly a fine for this one
+      // Only match if the next channel's name contains "fine" — never merge two
+      // independent channels of the same type (e.g. two color_wheel or two prism)
       const fineEntry = channelList.find(f =>
         f.ch === ch.ch + 1 && f !== ch &&
-        (f.type === ch.type || f.type === ch.type + '_fine' || (f.name && f.name.toLowerCase().includes('fine')))
+        (f.type === ch.type + '_fine' || (f.name && f.name.toLowerCase().includes('fine')))
       );
       if (fineEntry) fine = fineEntry.ch;
     }
