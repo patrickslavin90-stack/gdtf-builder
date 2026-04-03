@@ -275,8 +275,13 @@ function lookupAttr(ma3Name) {
   if (ATTR_DB[baseKey]) {
     const base = ATTR_DB[baseKey];
     const zoneMatch = key.match(/_Z(\d+)$/);
-    const zone = zoneMatch ? zoneMatch[1] : '';
-    return { ...base, gdtf: base.gdtf + (zone ? '_Z' + zone : ''), pretty: base.pretty + (zone ? ' Z' + zone : '') };
+    const zoneNum = zoneMatch ? parseInt(zoneMatch[1]) : 0;
+    if (zoneNum <= 1) return base; // first instance keeps base name (Dimmer, Shutter1, ColorAdd_R)
+    // MA3 convention: strip trailing digits from base, append zone number
+    // Shutter1 → Shutter2, Dimmer → Dimmer2, ColorAdd_R → ColorAdd_R2
+    // Effects1 → Effects2, Zoom → Zoom2
+    const gdtfBase = base.gdtf.replace(/\d+$/, ''); // Shutter1 → Shutter, Effects1 → Effects
+    return { ...base, gdtf: gdtfBase + zoneNum, pretty: base.pretty + ' ' + zoneNum };
   }
   return { gdtf: ma3Name, pretty: ma3Name, feature: 'Control.Control', physical: 'None', geo: 'Beam' };
 }
