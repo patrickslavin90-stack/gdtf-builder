@@ -7,7 +7,7 @@ End with: </GDTF>
 CRITICAL NESTING STRUCTURE — follow this EXACTLY or MA3 rejects the file:
 
 <GDTF DataVersion="1.2">
-  <FixtureType Name="X" LongName="X" ShortName="X" Manufacturer="X" Description="Built by GDTF-BUILD.COM" FixtureTypeID="GUID" CanHaveChildren="Yes" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
+  <FixtureType Name="X" LongName="X" ShortName="X" Manufacturer="X" Description="Built by GDTF-BUILD.COM" FixtureTypeID="GUID" CanHaveChildren="No" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
     <AttributeDefinitions>
       <FeatureGroups>
         <FeatureGroup Name="Dimmer"><Feature Name="Dimmer"/></FeatureGroup>
@@ -349,7 +349,10 @@ function buildGeoTree(prefix, pixelModules, beamType) {
 
 // ── Build DMXChannel XML for a single channel ──
 function buildDMXChannelXml(ch, geoName, resolution, offsetStr) {
-  const defVal = ch.defaultVal !== undefined ? String(ch.defaultVal) : (ch.default0 ? '0' : (ch.default255 ? '255' : '0'));
+  // Default values are specified as 8-bit (0-255) — scale to match resolution
+  // 8-bit value V scales to 16-bit as V*256 (coarse byte in high position)
+  const defVal8 = ch.defaultVal !== undefined ? ch.defaultVal : (ch.default0 ? 0 : (ch.default255 ? 255 : 0));
+  const defVal = resolution <= 1 ? String(defVal8) : String(defVal8 * Math.pow(256, resolution - 1));
   const master = ch.master || 'None';
   let physAttrs = '';
   if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
@@ -501,7 +504,7 @@ function buildGDTFFromParsed(parsed, { manufacturer, fixtureName, shortName, dmx
   // ── Build XML document ──
   let xml = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <GDTF DataVersion="1.2">
-  <FixtureType Name="${name}" LongName="${mfr} ${name}" ShortName="${short}" Manufacturer="${mfr}" Description="Built by GDTF-BUILD.COM" FixtureTypeID="${guid}" CanHaveChildren="Yes" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
+  <FixtureType Name="${name}" LongName="${mfr} ${name}" ShortName="${short}" Manufacturer="${mfr}" Description="Built by GDTF-BUILD.COM" FixtureTypeID="${guid}" CanHaveChildren="No" ThumbnailOffsetX="0" ThumbnailOffsetY="0">
     <AttributeDefinitions>
       <FeatureGroups>
 `;
