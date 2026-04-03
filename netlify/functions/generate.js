@@ -349,12 +349,12 @@ function buildGeoTree(prefix, pixelModules, beamType) {
 
 // ── Build DMXChannel XML for a single channel ──
 function buildDMXChannelXml(ch, geoName, resolution, offsetStr) {
-  // Default values scaled to channel resolution
+  // Default values: match manufacturer GDTF convention (Robe reference)
+  // 8-bit channels use /1, 16-bit channels use /2
   const defVal8 = ch.defaultVal !== undefined ? ch.defaultVal : (ch.default0 ? 0 : (ch.default255 ? 255 : 0));
-  let defStr;
-  if (defVal8 === 0) { defStr = `0/${resolution}`; }
-  else if (resolution <= 1) { defStr = `${defVal8}/1`; }
-  else { defStr = `${defVal8 * 65536 + defVal8}/4`; } // MA3 dec24 format: V*65536+V (e.g. 128→8388736)
+  const maxForRes = Math.pow(256, resolution) - 1; // res=1→255, res=2→65535
+  const defScaled = defVal8 === 0 ? 0 : defVal8 === 255 ? maxForRes : defVal8 === 128 ? Math.ceil(maxForRes / 2) : Math.round(defVal8 / 255 * maxForRes);
+  const defStr = `${defScaled}/${resolution}`;
   const master = ch.master || 'None';
   let physAttrs = '';
   if (ch.physFrom !== undefined) physAttrs = ` PhysicalFrom="${ch.physFrom}.000000" PhysicalTo="${ch.physTo}.000000"`;
