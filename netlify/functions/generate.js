@@ -917,17 +917,33 @@ function processChannelList(channelList) {
       if (fine) usedOffsets.add(fine);
     }
   }
-  // Zone-suffix duplicates
+  // Zone-suffix duplicates — renumber ALL instances of a base attribute sequentially
+  // This handles cases like: dimmer(ch11), dimmer(ch18), dimmer2(ch19)
+  // which should become Dimmer, Dimmer2, Dimmer3 (not Dimmer, Dimmer3, Dimmer2)
   const attrCount = {};
   for (const ch of merged) attrCount[ch.attribute] = (attrCount[ch.attribute] || 0) + 1;
-  const attrIndex = {};
-  return merged.map(ch => {
-    if (attrCount[ch.attribute] > 1) {
-      attrIndex[ch.attribute] = (attrIndex[ch.attribute] || 0) + 1;
-      return { ...ch, attribute: ch.attribute + '_Z' + attrIndex[ch.attribute] };
+
+  // Find base attribute families that need sequential numbering
+  // e.g. DIMMER appears 2x, DIM2 appears 1x → all are "Dimmer" family, need Dimmer/Dimmer2/Dimmer3
+  const familyMap = {}; // base gdtf name → list of merged indices
+  for (let i = 0; i < merged.length; i++) {
+    const info = ATTR_DB[merged[i].attribute.toUpperCase()] || {};
+    const gdtfName = info.gdtf || merged[i].attribute;
+    const baseName = gdtfName.replace(/\d+$/, '');
+    if (!familyMap[baseName]) familyMap[baseName] = [];
+    familyMap[baseName].push(i);
+  }
+
+  // For families with >1 member, assign sequential numbers
+  for (const [baseName, indices] of Object.entries(familyMap)) {
+    if (indices.length <= 1) continue;
+    for (let j = 0; j < indices.length; j++) {
+      const zoneNum = j + 1;
+      merged[indices[j]] = { ...merged[indices[j]], attribute: merged[indices[j]].attribute + '_Z' + zoneNum };
     }
-    return ch;
-  });
+  }
+
+  return merged;
 }
 
 // ── Convert TABLE MATRIX format { tables: [...] } to standard { modes: [...] } ──
