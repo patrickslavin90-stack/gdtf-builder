@@ -267,6 +267,113 @@ const ATTR_DB = {
   INTENSITYMACROS2: { gdtf: 'IntensityMacro2', pretty: 'Intensity Macro 2', feature: 'Effect.Effect',   physical: 'None',           geo: 'Beam' },
 };
 
+// ── D4 (Avolites) attribute ID → ATTR_DB key mapping ──
+const D4_ATTR_MAP = {
+  'Pan': 'PAN', 'Tilt': 'TILT', 'PT_Speed': 'POSITIONMSPEED',
+  'Control': 'FIXTUREGLOBALRESET',
+  'Virtual_Col': 'COLOR1', 'BG_Virtual_Col': 'COLOR1',
+  'Red': 'COLORRGB1', 'Green': 'COLORRGB2', 'Blue': 'COLORRGB3', 'White': 'COLORRGB4',
+  'Red_Master': 'COLORRGB1', 'Green_Master': 'COLORRGB2', 'Blue_Master': 'COLORRGB3', 'White_Master': 'COLORRGB4',
+  'CTC': 'CTC', 'BG_CTC': 'CTC',
+  'Col_Mix_Func': 'COLORMIXER', 'Col_Mix_Func_Pixel': 'COLORMIXER',
+  'Pixel': 'LEDENGINEEFFECTS', 'Pixel_Spd': 'LEDENGINEEFFECTRATE', 'Pixel_Fade': 'LEDENGINEEFFECTSTEPTIME',
+  'Flower_Effect': 'EFFECTWHEEL',
+  'Flower_Red': 'COLORRGB13', 'Flower_Green': 'COLORRGB23', 'Flower_Blue': 'COLORRGB33', 'Flower_White': 'COLORRGB53',
+  'Flower_Col_Mac': 'MACROSELECT', 'Flower_Shutter': 'SHUTTER2', 'Flower_Dimmer': 'DIM2',
+  'Flower_Cyan': 'COLORSUB_C', 'Flower_Magenta': 'COLORSUB_M', 'Flower_Yellow': 'COLORSUB_Y',
+  'Zoom': 'ZOOM', 'Shutter': 'SHUTTER', 'Master_Shutter': 'SHUTTER',
+  'Dimmer': 'DIMMER', 'Master_Dimmer': 'DIMMER',
+  'Cyan': 'COLORSUB_C', 'Magenta': 'COLORSUB_M', 'Yellow': 'COLORSUB_Y',
+  'Iris': 'IRIS', 'Frost': 'FROST', 'Prism': 'PRISM', 'Focus': 'FOCUS',
+  'Gobo_Func': 'GOBO1', 'Gobo_Func2': 'GOBO2', 'Gobo_Rot': 'GOBO1POS', 'Gobo_Rot2': 'GOBO2POS',
+  'Active_Zone': 'NOFEATURE', 'BG_Active_Zone': 'NOFEATURE', 'Reserved': 'NOFEATURE',
+  'Patt_Sel': 'EFFECTMACROS', 'Patt_Orientation': 'EFFECTINDEXROTATE',
+  'Patt_Effect': 'EFFECTWHEEL2', 'Patt_Transition': 'EFFECTMACRORATE',
+  'Patt_Red': 'COLORRGB1', 'Patt_Green': 'COLORRGB2', 'Patt_Blue': 'COLORRGB3', 'Patt_White': 'COLORRGB4',
+  'Patt_Col_Mac': 'MACROSELECT', 'Patt_Shutter': 'SHUTTER', 'Patt_Dimmer': 'DIMMER',
+  'BG_Shutter': 'SHUTTER', 'BG_Dimmer': 'DIMMER',
+  'A_Phase': 'EFFECTWHEEL', 'A_Speed': 'EFFECTRATE',
+  'Crossfade': 'COLORCROSSFADE',
+};
+
+// ── Parse Avolites D4 fixture personality XML ──
+function parseD4Xml(d4Xml) {
+  if (!d4Xml || !d4Xml.includes('<Fixture')) return null;
+
+  // Extract fixture metadata
+  const nameMatch = d4Xml.match(/<Fixture[^>]+Name="([^"]+)"/);
+  const companyMatch = d4Xml.match(/<Fixture[^>]+Company="([^"]+)"/);
+  const fixtureName = nameMatch ? nameMatch[1] : 'Fixture';
+  const manufacturer = companyMatch ? companyMatch[1] : 'Unknown';
+
+  // Extract all modes (skip hidden, skip split "part" modes, skip cell-only modes)
+  const modeRegex = /<Mode\s+Name="([^"]+)"[^>]*>([\s\S]*?)<\/Mode>/g;
+  const modes = [];
+  let match;
+  while ((match = modeRegex.exec(d4Xml)) !== null) {
+    const modeName = match[1];
+    const modeBody = match[2];
+    // Skip split/part modes, cell definitions, and hidden modes
+    if (/part \d\/\d/i.test(modeName)) continue;
+    if (/\bcell\b/i.test(modeName)) continue;
+    if (/\bvdim\b/i.test(modeName)) continue;
+    if (/Hidden="True"/i.test(match[0])) continue;
+    // Skip modes without a channel count in the name
+    if (!/\d+\s*DMX/i.test(modeName)) continue;
+
+    // Extract channel assignments from <Include> section
+    const includeMatch = modeBody.match(/<Include>([\s\S]*?)<\/Include>/);
+    if (!includeMatch) continue;
+    const includeBody = includeMatch[1];
+    const attrRegex = /<Attribute\s+ID="([^"]+)"\s+ChannelOffset="([^"]+)"/g;
+    const channels = [];
+    const seenOffsets = new Set();
+    let attrMatch;
+    while ((attrMatch = attrRegex.exec(includeBody)) !== null) {
+      const d4Id = attrMatch[1];
+      const offsets = attrMatch[2].split(',').map(Number);
+      const coarse = offsets[0];
+      const fine = offsets.length > 1 ? offsets[1] : null;
+      // Skip duplicates (D4 sometimes lists master+cell versions of same channel)
+      const offsetKey = offsets.join(',');
+      if (seenOffsets.has(offsetKey)) continue;
+      seenOffsets.add(offsetKey);
+      // Map D4 ID to ATTR_DB key
+      let attrKey = D4_ATTR_MAP[d4Id];
+      if (!attrKey) {
+        // Handle numbered pixel attributes: Red1→COLORRGB1, Green5→COLORRGB2, etc.
+        const numMatch = d4Id.match(/^(Red|Green|Blue|White|Cyan|Magenta|Yellow)(\d+)$/);
+        if (numMatch) {
+          const baseMap = { Red: 'COLORRGB1', Green: 'COLORRGB2', Blue: 'COLORRGB3', White: 'COLORRGB4',
+                           Cyan: 'COLORSUB_C', Magenta: 'COLORSUB_M', Yellow: 'COLORSUB_Y' };
+          attrKey = baseMap[numMatch[1]] || 'NOFEATURE';
+        } else {
+          attrKey = 'NOFEATURE'; // Unknown attribute
+        }
+      }
+      channels.push({ attribute: attrKey, coarse, fine });
+    }
+
+    if (channels.length > 0) {
+      // Clean up mode name: "3: Advanced (RGBW), 33 DMX" → "Advanced RGBW"
+      let cleanName = modeName.replace(/^\d+:\s*/, '').replace(/,?\s*\d+\s*DMX$/i, '').trim();
+      modes.push({ name: cleanName, channels });
+    }
+  }
+
+  if (!modes.length) return null;
+
+  // Build parsed structure using the largest mode's channels for AttributeDefinitions
+  const largest = [...modes].sort((a, b) => b.channels.length - a.channels.length)[0];
+  const parsed = {
+    modules: [{ name: 'Main Module', class: 'Headmover', channels: largest.channels }],
+    instances: [{ moduleIndex: 0, patch: 1 }],
+    grouped: { 0: [1] },
+  };
+
+  return { parsed, modes, fixtureName, manufacturer };
+}
+
 function lookupAttr(ma3Name) {
   // Handle zone-suffixed attributes (e.g. COLORRGB1_Z2 → look up COLORRGB1)
   const key = ma3Name.toUpperCase();
@@ -1200,7 +1307,7 @@ function fixGeometryRefs(xml) {
 
 // ── Core generation logic (shared between sync and background) ──
 function prepareRequest(body) {
-  let { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes, existingXml, ma3Xml, ma3XmlpBase64 } = body;
+  let { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes, existingXml, ma3Xml, ma3XmlpBase64, d4Xml } = body;
 
   if (ma3XmlpBase64 && !ma3Xml) {
     const zlib = require('zlib');
@@ -1211,6 +1318,14 @@ function prepareRequest(body) {
     if (!fixtureName) { const m = ma3Xml.match(/FixtureType\s+name="([^"]+)"/); if (m) fixtureName = m[1]; }
     if (!manufacturer) { const m = ma3Xml.match(/<manufacturer>([^<]+)<\/manufacturer>/); if (m) manufacturer = m[1]; }
     if (!dmxMode) { const m = ma3Xml.match(/FixtureType[^>]+mode="([^"]+)"/); if (m) dmxMode = m[1]; }
+  }
+
+  // Parse D4 (Avolites) personality if provided
+  const parsedD4 = d4Xml ? parseD4Xml(d4Xml) : null;
+  if (parsedD4) {
+    if (!fixtureName) fixtureName = parsedD4.fixtureName;
+    if (!manufacturer) manufacturer = parsedD4.manufacturer;
+    if (!shortName) shortName = fixtureName ? fixtureName.slice(0, 10) : '';
   }
 
   const parsedMA3 = parseMA3Xml(ma3Xml || existingXml || channels || '');
@@ -1290,7 +1405,7 @@ function prepareRequest(body) {
 
   prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
 
-  return { prompt, parsedMA3, expectedFootprint, expectedChannels, extractedMeta: { manufacturer, fixtureName, shortName, dmxMode, fixtureType } };
+  return { prompt, parsedMA3, parsedD4, expectedFootprint, expectedChannels, extractedMeta: { manufacturer, fixtureName, shortName, dmxMode, fixtureType } };
 }
 
 async function callGemini(apiKey, prompt, complex = false) {
@@ -1408,6 +1523,7 @@ exports.postProcess = postProcess;
 exports.parseTextDeterministic = parseTextDeterministic;
 exports.buildGDTFFromParsed = buildGDTFFromParsed;
 exports.buildGDTFFromChannelList = buildGDTFFromChannelList;
+exports.parseD4Xml = parseD4Xml;
 exports.matrixToModes = matrixToModes;
 exports.TEXT_PARSE_PROMPT = TEXT_PARSE_PROMPT;
 
@@ -1470,12 +1586,19 @@ exports.handler = async function(event) {
   }
 
   try {
-    const { prompt, parsedMA3, expectedFootprint, expectedChannels, extractedMeta } = prepareRequest(body);
+    const { prompt, parsedMA3, parsedD4, expectedFootprint, expectedChannels, extractedMeta } = prepareRequest(body);
 
     let xml;
 
+    // For D4 (Avolites) uploads: build GDTF deterministically (no Gemini needed)
+    if (parsedD4 && body.d4Xml) {
+      xml = buildGDTFFromParsed(parsedD4.parsed, {
+        ...body, ...extractedMeta,
+        _overrideModes: parsedD4.modes,
+      });
+    }
     // For .xmlp uploads with parsed MA3 data: build GDTF deterministically (no Gemini needed)
-    if (parsedMA3 && (body.ma3XmlpBase64 || body.ma3Xml)) {
+    else if (parsedMA3 && (body.ma3XmlpBase64 || body.ma3Xml)) {
       xml = buildGDTFFromParsed(parsedMA3, { ...body, ...extractedMeta });
     } else {
       // Text/PDF input — two-step: Gemini parses text to JSON, then deterministic build
