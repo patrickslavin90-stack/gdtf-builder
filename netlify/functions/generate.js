@@ -193,9 +193,9 @@ const ATTR_DB = {
   COLORMIXER2:  { gdtf: 'ColorMixer2',       pretty: 'Color Mixer 2',    feature: 'Color.Color',        physical: 'None',           geo: 'Head', default255: true },
   COLORTEMPERATURE: { gdtf: 'ColorTemperature', pretty: 'Color Temp',    feature: 'Color.Color',        physical: 'ColorTemperature', geo: 'Head' },
   // CMY subtractive color (Mistral, Robin series, etc.)
-  COLORSUB_C:   { gdtf: 'ColorSub_C',        pretty: 'Cyan',             feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head', default255: true },
-  COLORSUB_M:   { gdtf: 'ColorSub_M',        pretty: 'Magenta',          feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head', default255: true },
-  COLORSUB_Y:   { gdtf: 'ColorSub_Y',        pretty: 'Yellow',           feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head', default255: true },
+  COLORSUB_C:   { gdtf: 'ColorSub_C',        pretty: 'Cyan',             feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head', default0: true },
+  COLORSUB_M:   { gdtf: 'ColorSub_M',        pretty: 'Magenta',          feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head', default0: true },
+  COLORSUB_Y:   { gdtf: 'ColorSub_Y',        pretty: 'Yellow',           feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Head', default0: true },
   // Additional color types
   COLORRGB_AMBER: { gdtf: 'ColorAdd_A',      pretty: 'Amber',            feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
   COLORRGB_UV:  { gdtf: 'ColorAdd_UV',       pretty: 'UV',               feature: 'Color.RGB',          physical: 'ColorComponent', geo: 'Beam', default255: true },
