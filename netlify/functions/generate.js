@@ -208,7 +208,7 @@ const ATTR_DB = {
   FOCUS:        { gdtf: 'Focus1',            pretty: 'Focus',            feature: 'Beam.Focus',         physical: 'None',           geo: 'Head' },
   FOCUSMODE:    { gdtf: 'FocusMode',         pretty: 'Focus Mode',       feature: 'Beam.Focus',         physical: 'None',           geo: 'Head' },
   FOCUSDISTANCE:{ gdtf: 'Focus1Distance',    pretty: 'Focus Distance',   feature: 'Beam.Focus',         physical: 'Length',         geo: 'Head' },
-  IRIS:         { gdtf: 'Iris',              pretty: 'Iris',             feature: 'Beam.Iris',          physical: 'None',           geo: 'Head', physFrom: 0, physTo: 1 },
+  IRIS:         { gdtf: 'Iris',              pretty: 'Iris',             feature: 'Beam.Iris',          physical: 'None',           geo: 'Head', physFrom: 0, physTo: 1, default255: true },
   FROST:        { gdtf: 'Frost1',            pretty: 'Frost',            feature: 'Beam.Frost',         physical: 'None',           geo: 'Head' },
   PRISM:        { gdtf: 'Prism1',            pretty: 'Prism',            feature: 'Beam.Prism',         physical: 'None',           geo: 'Head' },
   PRISM_POS:    { gdtf: 'Prism1Pos',         pretty: 'Prism Rotate',     feature: 'Beam.Prism',         physical: 'Angle',          geo: 'Head' },
