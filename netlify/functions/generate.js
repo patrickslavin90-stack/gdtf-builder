@@ -374,6 +374,163 @@ function parseD4Xml(d4Xml) {
   return { parsed, modes, fixtureName, manufacturer };
 }
 
+// ── ChamSys MagicQ HED file channel name → ATTR_DB key mapping ──
+const HED_ATTR_MAP = {
+  'Pan': 'PAN', 'Pan F': 'PAN', 'Tilt': 'TILT', 'Tilt F': 'TILT',
+  'P/T Speed': 'POSITIONMSPEED', 'Function': 'FIXTUREGLOBALRESET',
+  'V Col': 'COLOR1', 'Virtual Col': 'COLOR1',
+  'Red': 'COLORRGB1', 'Red F': 'COLORRGB1', 'Green': 'COLORRGB2', 'Green F': 'COLORRGB2',
+  'Blue': 'COLORRGB3', 'Blue F': 'COLORRGB3', 'White': 'COLORRGB4', 'White F': 'COLORRGB4',
+  'CTC': 'CTC', 'CTO': 'CTO',
+  'Col Mix Control': 'COLORMIXER', 'Col Mix Ctrl': 'COLORMIXER',
+  'Pixel FX': 'LEDENGINEEFFECTS', 'Pixel Speed': 'LEDENGINEEFFECTRATE', 'Pixel Fade': 'LEDENGINEEFFECTSTEPTIME',
+  'Flower FX': 'EFFECTWHEEL', 'Flower Effect': 'EFFECTWHEEL',
+  'Flower Red': 'COLORRGB13', 'Flower Green': 'COLORRGB23', 'Flower Blue': 'COLORRGB33', 'Flower White': 'COLORRGB53',
+  'Flower Col Macr': 'MACROSELECT', 'Flower Col Mac': 'MACROSELECT',
+  'Flower Stobe': 'SHUTTER2', 'Flower Strobe': 'SHUTTER2', 'Flower Shutter': 'SHUTTER2',
+  'Flower Dimmer': 'DIM2', 'Flower Dim': 'DIM2',
+  'Zoom': 'ZOOM', 'Zoom F': 'ZOOM', 'Focus': 'FOCUS', 'Focus F': 'FOCUS',
+  'Strobe': 'SHUTTER', 'Shutter': 'SHUTTER',
+  'Dimmer': 'DIMMER', 'Dimmer F': 'DIMMER', 'Intensity': 'DIMMER',
+  'Iris': 'IRIS', 'Iris F': 'IRIS', 'Frost': 'FROST', 'Prism': 'PRISM', 'Prism F': 'PRISM',
+  'Gobo': 'GOBO1', 'Gobo F': 'GOBO1', 'Gobo 2': 'GOBO2', 'Gobo Rot': 'GOBO1POS', 'Gobo Rot F': 'GOBO1POS',
+  'Cyan': 'COLORSUB_C', 'Cyan F': 'COLORSUB_C', 'Magenta': 'COLORSUB_M', 'Magenta F': 'COLORSUB_M',
+  'Yellow': 'COLORSUB_Y', 'Yellow F': 'COLORSUB_Y',
+  'Colour': 'COLOR1', 'Colour F': 'COLOR1', 'Color': 'COLOR1', 'Color F': 'COLOR1',
+  'Patt Sel': 'EFFECTMACROS', 'Pattern': 'EFFECTMACROS',
+  'Patt Orn': 'EFFECTINDEXROTATE', 'Patt Orient': 'EFFECTINDEXROTATE',
+  'Patt Effect': 'EFFECTWHEEL2', 'Patt Transition': 'EFFECTMACRORATE',
+  'A Phase': 'EFFECTWHEEL', 'A Speed': 'EFFECTRATE', 'Crossfade': 'COLORCROSSFADE',
+  'BG V Col': 'COLOR1', 'BG CTC': 'CTC',
+  'BG Strobe': 'SHUTTER', 'BG Dimmer': 'DIMMER',
+  'Patt Red': 'COLORRGB1', 'Patt Green': 'COLORRGB2', 'Patt Blue': 'COLORRGB3', 'Patt White': 'COLORRGB4',
+  'Patt Col Mac': 'MACROSELECT', 'Patt Strobe': 'SHUTTER', 'Patt Dimmer': 'DIMMER',
+  'Active Zone': 'NOFEATURE', 'BG Active Zone': 'NOFEATURE', 'Reserved': 'NOFEATURE',
+  'No Function': 'NOFEATURE',
+};
+
+// ── Decode ChamSys MagicQ HED file (XOR-obfuscated) ──
+function decodeHedBytes(buf) {
+  // Split into lines at literal CR/LF bytes
+  const rawLines = [];
+  let cur = [];
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0D || buf[i] === 0x0A) {
+      if (cur.length) { rawLines.push(cur); cur = []; }
+    } else {
+      cur.push(buf[i]);
+    }
+  }
+  if (cur.length) rawLines.push(cur);
+
+  // Decode each line: NOT(byte) XOR ((startKey + pos) % 127)
+  // Brute-force startKey per line — score by printability + structural patterns
+  const decoded = [];
+  for (const line of rawLines) {
+    let bestScore = -1, bestStr = '';
+    for (let k = 0; k < 127; k++) {
+      let s = '', printable = 0;
+      for (let j = 0; j < line.length; j++) {
+        const c = ((~line[j]) & 0xff) ^ ((k + j) % 127);
+        s += String.fromCharCode(c);
+        if (c >= 32 && c < 127) printable++;
+      }
+      let score = printable;
+      // Bonus for HED structural patterns: quoted strings, hex values, commas
+      score += (s.match(/,"[^"]*"/g) || []).length * 5;
+      score += (s.match(/[0-9a-f]{4,8},/g) || []).length * 3;
+      score += (s.match(/^"[^"]+",/g) || []).length * 10;
+      score += (s.match(/^0[0-9a-f]{3},/g) || []).length * 8;
+      // Penalty for any non-printable
+      if (printable < line.length) score -= (line.length - printable) * 3;
+      if (score > bestScore) { bestScore = score; bestStr = s; }
+    }
+    decoded.push(bestStr);
+  }
+  return decoded;
+}
+
+// ── Parse decoded HED lines into GDTF-ready structure ──
+function parseHedFile(hedBuf) {
+  const lines = decodeHedBytes(hedBuf);
+  if (!lines.length || !lines[0].includes('MagicQ personality file')) return null;
+
+  // Extract fixture name from P line or Spiider reference
+  let fixtureName = 'Fixture', manufacturer = 'Unknown';
+  for (const line of lines) {
+    const pMatch = line.match(/^P,\d+,"([^"]+)","([^"]*)"/);
+    if (pMatch) { fixtureName = pMatch[1]; manufacturer = pMatch[2] || 'Unknown'; break; }
+  }
+  // Look for a better name in the file (often near end)
+  for (const line of lines) {
+    if (/^"[A-Z][a-z]/.test(line) && line.split(',').length === 1) {
+      const nameMatch = line.match(/^"([^"]+)"/);
+      if (nameMatch && nameMatch[1].length > 3 && nameMatch[1].length < 30) {
+        fixtureName = nameMatch[1];
+      }
+    }
+  }
+
+  // Find channel definitions — they follow the mode info line
+  // Format: "ChannelName",flags,wheelIndex,
+  const channels = [];
+  let inChannels = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // Mode info line: starts with hex channel count
+    if (!inChannels && /^00[0-9a-f]{2},0[0-9a-f]{3},/.test(line)) {
+      inChannels = true;
+      continue;
+    }
+    if (inChannels) {
+      // Channel line: "Name",hexflags,hexwheel,
+      const chMatch = line.match(/^"([^"]+)",([0-9a-f]{8}),([0-9a-f]{8}),?$/);
+      if (chMatch) {
+        const name = chMatch[1].trim();
+        const isFine = /\bF$|\bFine$|\bLow$/i.test(name);
+        channels.push({ name, isFine });
+      } else {
+        // End of channel block — hit defaults or other data
+        if (channels.length > 0) break;
+      }
+    }
+  }
+
+  if (!channels.length) return null;
+
+  // Build channel list — merge fine channels into coarse
+  const merged = [];
+  for (let i = 0; i < channels.length; i++) {
+    if (channels[i].isFine) continue; // skip, merged into previous coarse
+    const ch = channels[i];
+    const chNum = i + 1;
+    // Check if next channel is the fine for this one
+    const hasFine = (i + 1 < channels.length) && channels[i + 1].isFine;
+    const fineNum = hasFine ? chNum + 1 : null;
+
+    // Map name to ATTR_DB key
+    let attrKey = HED_ATTR_MAP[ch.name];
+    if (!attrKey) {
+      // Try partial matches
+      const lower = ch.name.toLowerCase();
+      for (const [hedName, key] of Object.entries(HED_ATTR_MAP)) {
+        if (lower === hedName.toLowerCase()) { attrKey = key; break; }
+      }
+    }
+    if (!attrKey) attrKey = 'NOFEATURE';
+
+    merged.push({ attribute: attrKey, coarse: chNum, fine: fineNum });
+  }
+
+  const parsed = {
+    modules: [{ name: 'Main Module', class: 'Headmover', channels: merged }],
+    instances: [{ moduleIndex: 0, patch: 1 }],
+    grouped: { 0: [1] },
+  };
+
+  return { parsed, fixtureName, manufacturer };
+}
+
 function lookupAttr(ma3Name) {
   // Handle zone-suffixed attributes (e.g. COLORRGB1_Z2 → look up COLORRGB1)
   const key = ma3Name.toUpperCase();
@@ -1307,7 +1464,7 @@ function fixGeometryRefs(xml) {
 
 // ── Core generation logic (shared between sync and background) ──
 function prepareRequest(body) {
-  let { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes, existingXml, ma3Xml, ma3XmlpBase64, d4Xml } = body;
+  let { manufacturer, fixtureName, shortName, dmxMode, fixtureType, channels, notes, existingXml, ma3Xml, ma3XmlpBase64, d4Xml, hedBase64 } = body;
 
   if (ma3XmlpBase64 && !ma3Xml) {
     const zlib = require('zlib');
@@ -1318,6 +1475,18 @@ function prepareRequest(body) {
     if (!fixtureName) { const m = ma3Xml.match(/FixtureType\s+name="([^"]+)"/); if (m) fixtureName = m[1]; }
     if (!manufacturer) { const m = ma3Xml.match(/<manufacturer>([^<]+)<\/manufacturer>/); if (m) manufacturer = m[1]; }
     if (!dmxMode) { const m = ma3Xml.match(/FixtureType[^>]+mode="([^"]+)"/); if (m) dmxMode = m[1]; }
+  }
+
+  // Parse HED (ChamSys MagicQ) personality if provided
+  let parsedHED = null;
+  if (hedBase64) {
+    const hedBuf = Buffer.from(hedBase64, 'base64');
+    parsedHED = parseHedFile(hedBuf);
+    if (parsedHED) {
+      if (!fixtureName) fixtureName = parsedHED.fixtureName;
+      if (!manufacturer) manufacturer = parsedHED.manufacturer;
+      if (!shortName) shortName = fixtureName ? fixtureName.slice(0, 10) : '';
+    }
   }
 
   // Parse D4 (Avolites) personality if provided
@@ -1405,7 +1574,7 @@ function prepareRequest(body) {
 
   prompt += 'Generate complete valid GDTF 1.2. Follow all rules exactly. Raw XML only.';
 
-  return { prompt, parsedMA3, parsedD4, expectedFootprint, expectedChannels, extractedMeta: { manufacturer, fixtureName, shortName, dmxMode, fixtureType } };
+  return { prompt, parsedMA3, parsedD4, parsedHED, expectedFootprint, expectedChannels, extractedMeta: { manufacturer, fixtureName, shortName, dmxMode, fixtureType } };
 }
 
 async function callGemini(apiKey, prompt, complex = false) {
@@ -1524,6 +1693,7 @@ exports.parseTextDeterministic = parseTextDeterministic;
 exports.buildGDTFFromParsed = buildGDTFFromParsed;
 exports.buildGDTFFromChannelList = buildGDTFFromChannelList;
 exports.parseD4Xml = parseD4Xml;
+exports.parseHedFile = parseHedFile;
 exports.matrixToModes = matrixToModes;
 exports.TEXT_PARSE_PROMPT = TEXT_PARSE_PROMPT;
 
@@ -1586,12 +1756,16 @@ exports.handler = async function(event) {
   }
 
   try {
-    const { prompt, parsedMA3, parsedD4, expectedFootprint, expectedChannels, extractedMeta } = prepareRequest(body);
+    const { prompt, parsedMA3, parsedD4, parsedHED, expectedFootprint, expectedChannels, extractedMeta } = prepareRequest(body);
 
     let xml;
 
+    // For HED (ChamSys MagicQ) uploads: build GDTF deterministically (no Gemini needed)
+    if (parsedHED && body.hedBase64) {
+      xml = buildGDTFFromParsed(parsedHED.parsed, { ...body, ...extractedMeta });
+    }
     // For D4 (Avolites) uploads: build GDTF deterministically (no Gemini needed)
-    if (parsedD4 && body.d4Xml) {
+    else if (parsedD4 && body.d4Xml) {
       xml = buildGDTFFromParsed(parsedD4.parsed, {
         ...body, ...extractedMeta,
         _overrideModes: parsedD4.modes,

@@ -586,7 +586,7 @@ footer a:hover { color: var(--amber); }
       <button class="help-close" onclick="document.getElementById('help-modal').classList.remove('show')">x</button>
       <h3 style="color:var(--amber);margin-bottom:12px;font-size:15px">How to use GDTF Builder</h3>
       <ol style="padding-left:18px;line-height:2;font-size:12px;color:var(--text)">
-        <li>Upload an <strong>MA3 patch file</strong> (.xmlp), <strong>Avolites personality</strong> (.d4), or type a channel list manually</li>
+        <li>Upload an <strong>MA3 patch file</strong> (.xmlp), <strong>Avolites personality</strong> (.d4), <strong>ChamSys head file</strong> (.hed), or type a channel list manually</li>
         <li>Select your <strong>fixture type</strong> (Moving Head / Static)</li>
         <li>Click <strong>Generate GDTF</strong> and download the file</li>
         <li>Copy the <code>.gdtf</code> file to your fixture library:
@@ -615,7 +615,7 @@ footer a:hover { color: var(--amber); }
       <div class="drop-label">Drop a file or click to browse</div>
       <div class="drop-types">GDTF · XML · MA3 patch · PDF · Image · CSV · TXT</div>
     </div>
-    <input type="file" id="file-input" accept=".gdtf,.xml,.xmlp,.d4,.pdf,.png,.jpg,.jpeg,.csv,.txt">
+    <input type="file" id="file-input" accept=".gdtf,.xml,.xmlp,.d4,.hed,.pdf,.png,.jpg,.jpeg,.csv,.txt">
     <div id="file-display"></div>
 
     <!-- Essential fields -->
@@ -1040,6 +1040,14 @@ function handleFile(file) {
       } catch(e) {} // auto-fill failure is non-critical
     };
     r.readAsDataURL(file);
+  } else if (ext === 'hed') {
+    fileType = 'hed';
+    const r = new FileReader();
+    r.onload = e => {
+      fileContent = e.target.result.split(',')[1]; // base64
+      setStatus('ok', 'ChamSys MagicQ head file loaded — deterministic conversion, no AI needed');
+    };
+    r.readAsDataURL(file);
   } else if (ext === 'd4') {
     fileType = 'd4';
     const r = new FileReader();
@@ -1440,6 +1448,9 @@ async function generate() {
     }
     if (fileType === 'd4' && fileContent) {
       payload.d4Xml = fileContent;
+    }
+    if (fileType === 'hed' && fileContent) {
+      payload.hedBase64 = fileContent;
     }
     if (fileType === 'text' && fileContent) payload.existingXml = fileContent.includes('<GDTF') ? fileContent : null;
     if (fileType === 'text' && fileContent && !payload.existingXml) payload.channels = (channels ? channels + '\n\n' : '') + 'FILE CONTENT:\n' + fileContent.slice(0, 8000);
